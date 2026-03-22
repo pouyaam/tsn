@@ -1,0 +1,1614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#06060b" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Tunnel Manager</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="fonts/fonts.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app">
+
+  <!-- ─── Sidebar (desktop) / hidden on mobile ──── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx="8" fill="url(#g)"/>
+        <path d="M8 16h16M16 8v16" stroke="rgba(255,255,255,.85)" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="16" cy="16" r="4" fill="rgba(255,255,255,.15)" stroke="rgba(255,255,255,.7)" stroke-width="1.5"/>
+        <defs><linearGradient id="g" x1="0" y1="0" x2="32" y2="32"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs>
+      </svg>
+      <div>
+        <h1>Tunnel Manager</h1>
+        <small>SSH &amp; VPN Control</small>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Overview</div>
+      <div class="nav-item active" data-nav="dashboard" onclick="switchPage('dashboard')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Services</div>
+      <div class="nav-item" data-nav="tunnels" onclick="switchPage('tunnels')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 14a1 1 0 01-.78-1.63l9.9-10.2a.5.5 0 01.86.46l-1.92 6.02A1 1 0 0013 10h7a1 1 0 01.78 1.63l-9.9 10.2a.5.5 0 01-.86-.46l1.92-6.02A1 1 0 0011 14H4z"/></svg>
+        SSH Tunnels
+        <span class="nav-dot" id="nav-dot-tunnel"></span>
+      </div>
+      <div class="nav-item" data-nav="vpn" onclick="switchPage('vpn')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        VPN
+        <span class="nav-dot" id="nav-dot-vpn"></span>
+      </div>
+      <div class="nav-item" data-nav="connections" onclick="switchPage('connections')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v-2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        Connections
+        <span class="nav-dot" id="nav-dot-conn"></span>
+      </div>
+      <div class="nav-item" data-nav="v2ray" onclick="switchPage('v2ray')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        V2Ray
+      </div>
+      <div class="nav-item" data-nav="xray" onclick="switchPage('xray')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+        Xray
+      </div>
+      <div class="nav-item" data-nav="ovpn-server" onclick="switchPage('ovpn-server')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        OpenVPN Server
+      </div>
+      <div class="nav-item" data-nav="l2tp" onclick="switchPage('l2tp')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 7V5a4 4 0 00-8 0v2"/></svg>
+        L2TP
+      </div>
+      <div class="nav-item" data-nav="statistics" onclick="switchPage('statistics')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="2" width="4" height="19"/></svg>
+        Statistics
+      </div>
+      <div class="nav-item" data-nav="settings" onclick="switchPage('settings')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+        Settings
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Remote Access</div>
+      <a id="panel-url" class="nav-item hidden" href="#" target="_blank">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        <span id="panel-url-text">Remote Panel</span>
+      </a>
+      <div id="no-remote" class="nav-item" style="opacity:.4;cursor:default">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+        No remote access
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <form method="POST" action="/logout" style="margin:0">
+        <button type="submit" class="nav-item" style="width:100%;border:none;font:inherit;text-align:left">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Sign Out
+        </button>
+      </form>
+    </div>
+  </aside>
+
+  <!-- ─── Mobile hamburger + drawer ────────────────── -->
+  <button class="hamburger-btn" id="hamburger-btn" onclick="toggleDrawer()">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="drawer-overlay hidden" id="drawer-overlay" onclick="closeDrawer()"></div>
+
+  <!-- ─── WS Connection Indicator ────────────────── -->
+  <div class="ws-indicator" id="ws-indicator" title="WebSocket disconnected">
+    <span class="ws-dot" id="ws-dot"></span>
+  </div>
+
+  <!-- ─── Page: Dashboard ──────────────────────────── -->
+  <div class="page" id="page-dashboard">
+    <div class="page-top">
+      <h2>Dashboard</h2>
+      <div class="page-top-right">
+        <span class="dash-time" id="dash-time"></span>
+      </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="dash-grid">
+      <div class="dash-card">
+        <div class="dash-card-icon" style="background:var(--accent-dim);color:var(--accent)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v-2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        </div>
+        <div class="dash-card-info">
+          <div class="dash-card-label">Total Users</div>
+          <div class="dash-card-value" id="dash-total-users">0</div>
+        </div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-icon" style="background:var(--green-dim);color:var(--green)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <div class="dash-card-info">
+          <div class="dash-card-label">Online Now</div>
+          <div class="dash-card-value" id="dash-online-users">0</div>
+        </div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-icon" style="background:var(--amber-dim);color:var(--amber)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        <div class="dash-card-info">
+          <div class="dash-card-label">Total Traffic</div>
+          <div class="dash-card-value" id="dash-total-traffic">0 B</div>
+        </div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-icon" style="background:var(--purple-dim);color:var(--purple)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <div class="dash-card-info">
+          <div class="dash-card-label">Active Connections</div>
+          <div class="dash-card-value" id="dash-active-conns">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Service Status -->
+    <div class="dash-section-title">Services</div>
+    <div class="dash-services">
+      <div class="dash-service" id="dash-svc-tunnel">
+        <span class="dash-svc-dot" id="dash-svc-tunnel-dot"></span>
+        <span class="dash-svc-name">SSH Tunnel</span>
+        <span class="dash-svc-status" id="dash-svc-tunnel-status">Idle</span>
+      </div>
+      <div class="dash-service" id="dash-svc-vpn">
+        <span class="dash-svc-dot" id="dash-svc-vpn-dot"></span>
+        <span class="dash-svc-name">OpenConnect VPN</span>
+        <span class="dash-svc-status" id="dash-svc-vpn-status">--</span>
+      </div>
+      <div class="dash-service" id="dash-svc-xray">
+        <span class="dash-svc-dot green" id="dash-svc-xray-dot"></span>
+        <span class="dash-svc-name">V2Ray / Xray</span>
+        <span class="dash-svc-status" id="dash-svc-xray-status">--</span>
+      </div>
+    </div>
+
+    <!-- Recent Users -->
+    <!-- Connection Quality Graph -->
+    <div class="dash-section-title">Connection Quality</div>
+    <div class="card" id="quality-graph-card" style="padding:12px">
+      <canvas id="quality-canvas" width="600" height="140" style="width:100%;height:140px"></canvas>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--t3)">
+        <span id="quality-label-left">--</span>
+        <span id="quality-label-right">Now</span>
+      </div>
+    </div>
+
+    <div class="dash-section-title">Recent Users</div>
+    <div id="dash-recent-users" class="dash-recent-list">
+      <div class="empty" style="padding:24px"><p>No accounts yet</p></div>
+    </div>
+  </div>
+
+  <!-- ─── Page: SSH Tunnels ───────────────────────── -->
+  <div class="page hidden" id="page-tunnels">
+    <div class="page-top">
+      <h2>SSH Tunnels</h2>
+      <div class="page-top-right">
+        <div id="global-pill" class="pill">
+          <span class="pill-dot"></span>
+          <span id="global-pill-text">Idle</span>
+        </div>
+        <button id="btn-add-tunnel" class="btn btn-primary btn-touch">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add
+        </button>
+      </div>
+    </div>
+
+    <div id="stats-bar" class="stats-row hidden">
+      <div class="stat-chip"><span class="stat-lbl">Up</span><span id="stat-uptime" class="stat-val">00:00:00</span></div>
+      <div class="stat-chip"><span class="stat-lbl">In</span><span id="stat-bytes-in" class="stat-val">0 B</span></div>
+      <div class="stat-chip"><span class="stat-lbl">Out</span><span id="stat-bytes-out" class="stat-val">0 B</span></div>
+      <div class="stat-chip"><span class="stat-lbl">Conn</span><span id="stat-connections" class="stat-val">0</span></div>
+      <div class="stat-chip"><span class="stat-lbl">Re</span><span id="stat-reconnects" class="stat-val">0</span></div>
+      <div class="stat-chip"><span class="stat-lbl">&darr;/s</span><span id="stat-bw-in" class="stat-val">0</span></div>
+      <div class="stat-chip"><span class="stat-lbl">&uarr;/s</span><span id="stat-bw-out" class="stat-val">0</span></div>
+      <div class="stat-chip"><span class="stat-lbl">Ping</span><span id="stat-latency" class="stat-val">--</span></div>
+    </div>
+    <canvas id="latency-graph" class="sparkline hidden"></canvas>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-row" style="align-items:center;margin-bottom:8px">
+        <div>
+          <div class="card-title">SSH Tunnel Logs</div>
+          <div class="card-meta">Route preflight, SSH connect, health checks, and reconnect events</div>
+        </div>
+        <div class="card-actions">
+          <button class="btn btn-ghost btn-sm" onclick="copySshTunnelLogs()">Copy</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearSshTunnelLogs()">Clear</button>
+          <button class="btn btn-ghost btn-sm" onclick="refreshSshTunnelLogs()">Refresh</button>
+        </div>
+      </div>
+      <pre id="ssh-tunnel-logs-output" class="log-box">No SSH tunnel logs yet</pre>
+    </div>
+
+    <div id="tunnels-container">
+      <div id="tunnels-skeleton">
+        <div class="skel-card"><div class="skel-row"><div style="flex:1"><div class="skel-line w-40"></div><div class="skel-line w-80" style="margin-top:8px"></div><div class="skel-line w-60" style="margin-top:6px"></div></div><div class="skel-btn"></div></div></div>
+        <div class="skel-card"><div class="skel-row"><div style="flex:1"><div class="skel-line w-60"></div><div class="skel-line w-80" style="margin-top:8px"></div><div class="skel-line w-40" style="margin-top:6px"></div></div><div class="skel-btn"></div></div></div>
+      </div>
+      <div id="empty-state" class="empty hidden">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="1" stroke-linecap="round"><path d="M4 14a1 1 0 01-.78-1.63l9.9-10.2a.5.5 0 01.86.46l-1.92 6.02A1 1 0 0013 10h7a1 1 0 01.78 1.63l-9.9 10.2a.5.5 0 01-.86-.46l1.92-6.02A1 1 0 0011 14H4z"/></svg>
+        <p>No tunnels configured</p>
+        <p class="hint">Tap "Add" to get started</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Page: Connections ───────────────────────── -->
+  <div class="page hidden" id="page-connections">
+    <div class="page-top">
+      <h2>Connections</h2>
+      <div id="conn-count-pill" class="pill"><span class="pill-dot"></span><span id="conn-count-text">–</span></div>
+    </div>
+
+    <!-- Stats row -->
+    <div class="conn-stats-row">
+      <div class="conn-stat-card"><div class="conn-stat-label">Active IPs</div><div class="conn-stat-val" id="cs-active-ips">0</div></div>
+      <div class="conn-stat-card"><div class="conn-stat-label">Requests</div><div class="conn-stat-val" id="cs-log-count">0</div></div>
+      <div class="conn-stat-card"><div class="conn-stat-label">Countries</div><div class="conn-stat-val" id="cs-countries">0</div></div>
+      <div class="conn-stat-card"><div class="conn-stat-label">SSH Conns</div><div class="conn-stat-val" id="cs-ssh-count">0</div></div>
+    </div>
+
+    <!-- Geo map -->
+    <div class="card" id="geoip-map-card" style="padding:12px;position:relative;overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:12px;font-weight:600;color:var(--t2)">Client Locations</span>
+        <span id="geoip-count" style="font-size:10px;color:var(--t3)"></span>
+      </div>
+      <canvas id="geoip-canvas" width="700" height="280" style="width:100%;height:auto;border-radius:6px"></canvas>
+    </div>
+
+    <!-- V2Ray Clients -->
+    <div class="section-divider" style="margin-top:20px">
+      <h2>V2Ray Clients</h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="v2ray-client-count" style="font-size:12px;color:var(--t3)"></span>
+        <button class="btn btn-ghost btn-sm" onclick="refreshConnectionsTab()">Refresh</button>
+      </div>
+    </div>
+    <div id="v2ray-clients-grid"></div>
+
+    <!-- Access Log -->
+    <div class="section-divider" style="margin-top:20px">
+      <h2>Access Log <span id="access-log-count" style="font-size:11px;font-weight:400;color:var(--t3)"></span></h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="access-log-filter" class="input" style="width:160px;font-size:12px;padding:4px 8px" placeholder="Filter IP or domain…" oninput="filterAccessLog()" />
+        <button class="btn btn-ghost btn-sm" onclick="clearLocalAccessLog()">Clear</button>
+      </div>
+    </div>
+    <div id="conn-access-log"></div>
+
+    <!-- SSH tunnel connections -->
+    <div class="section-divider" id="ssh-conn-divider" style="margin-top:20px">
+      <h2>SSH Tunnel Connections</h2>
+    </div>
+    <div id="conn-list">
+      <div id="conn-skeleton">
+        <div class="skel-card"><div class="skel-row"><div style="flex:1"><div class="skel-line w-40"></div><div class="skel-line w-60" style="margin-top:6px"></div></div><div class="skel-btn"></div></div></div>
+        <div class="skel-card"><div class="skel-row"><div style="flex:1"><div class="skel-line w-60"></div><div class="skel-line w-40" style="margin-top:6px"></div></div><div class="skel-btn"></div></div></div>
+      </div>
+      <div id="conn-empty" class="empty hidden">
+        <p>No SSH tunnel connections</p>
+      </div>
+    </div>
+
+    <!-- Audit history -->
+    <div class="section-divider" style="margin-top:20px">
+      <h2>History</h2>
+      <button class="btn btn-ghost btn-sm" onclick="loadAuditLog()">Refresh</button>
+    </div>
+    <div id="audit-list"></div>
+  </div>
+
+  <!-- ─── Page: VPN ───────────────────────────────── -->
+  <div class="page hidden" id="page-vpn">
+
+    <!-- OpenConnect Section -->
+    <div class="page-top">
+      <h2>OpenConnect</h2>
+      <div id="oc-pill" class="pill amber">
+        <span class="pill-dot"></span>
+        <span id="oc-pill-text">Searching</span>
+      </div>
+    </div>
+
+    <div id="vpn-skeleton">
+      <div class="skel-card"><div class="skel-line w-40"></div><div class="skel-line w-80" style="margin-top:8px"></div><div class="skel-line w-60" style="margin-top:6px"></div><div class="skel-line w-80" style="margin-top:6px"></div><div class="skel-line w-40" style="margin-top:6px"></div><div class="skel-row" style="margin-top:8px"><div class="skel-btn"></div></div></div>
+      <div class="skel-card"><div class="skel-line w-60"></div><div class="skel-line w-80" style="margin-top:8px"></div><div class="skel-line w-40" style="margin-top:6px"></div><div class="skel-line w-80" style="margin-top:6px"></div><div class="skel-row" style="margin-top:8px"><div class="skel-btn"></div></div></div>
+    </div>
+    <div class="card hidden" id="oc-card">
+      <div class="kv-grid">
+        <span class="kv-k">Mode</span><span class="kv-v" id="oc-mode-info">Network</span>
+        <span class="kv-k" id="oc-agent-label">Agent</span><span class="kv-v" id="oc-agent-info">Scanning LAN...</span>
+        <span class="kv-k">Server</span><span class="kv-v" id="oc-vpn-server">--</span>
+        <span class="kv-k">Group</span><span class="kv-v" id="oc-vpn-group">--</span>
+        <span class="kv-k">User</span><span class="kv-v" id="oc-vpn-user">--</span>
+        <span class="kv-k">Uptime</span><span class="kv-v" id="oc-uptime">--:--:--</span>
+      </div>
+      <div class="card-btns">
+        <button id="oc-btn-start" class="btn btn-green btn-touch hidden" onclick="ocSendCommand('start')">Connect</button>
+        <button id="oc-btn-retry" class="btn btn-amber btn-touch hidden" onclick="ocSendCommand('retry')">Retry</button>
+        <button id="oc-btn-stop" class="btn btn-red btn-touch hidden" onclick="ocSendCommand('stop')">Disconnect</button>
+      </div>
+      <div class="card-foot" id="oc-status-msg">Searching for agent on LAN...</div>
+      <button class="btn-expand" onclick="toggleOcLogs()">
+        <span id="oc-logs-toggle-text">Show Logs</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div id="oc-logs-container" class="hidden">
+        <div id="oc-logs" class="logs-box"></div>
+      </div>
+    </div>
+
+    <div class="section-divider" style="margin-top:20px">
+      <h2>OpenVPN</h2>
+    </div>
+
+    <div class="card">
+      <div class="card-row" style="align-items:center">
+        <div>
+          <div class="card-title">OpenVPN Client</div>
+          <div class="card-meta">Connect the profile first, then create an SSH SOCKS tunnel on the OpenVPN TUN device for Xray/V2Ray traffic.</div>
+        </div>
+        <div id="ovpn-pill" class="pill">
+          <span class="pill-dot"></span>
+          <span id="ovpn-pill-text">Disconnected</span>
+        </div>
+      </div>
+
+      <div class="kv-grid" style="margin-top:12px">
+        <span class="kv-k">Status</span><span class="kv-v" id="ovpn-status-text">Idle</span>
+        <span class="kv-k">TUN Device</span><span class="kv-v" id="ovpn-tun-device">--</span>
+        <span class="kv-k">Managed Routes</span><span class="kv-v" id="ovpn-routed-hosts">None</span>
+        <span class="kv-k">Uptime</span><span class="kv-v" id="ovpn-uptime">--:--:--</span>
+      </div>
+
+      <div class="ovpn-form">
+        <div class="field-row">
+          <div class="field">
+            <label>Uploaded Profile</label>
+            <select id="ovpn-profile-select" class="input">
+              <option value="">-- Select --</option>
+            </select>
+          </div>
+          <div class="field" style="flex:0 0 160px">
+            <label>Upload</label>
+            <label class="btn btn-ghost upload-btn">
+              Choose File
+              <input type="file" accept=".ovpn,.conf" onchange="ovpnUploadProfile(this)" style="display:none" />
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Profile Path <small>(optional)</small></label>
+          <input id="ovpn-profile-path" class="input" type="text" placeholder="/absolute/path/to/profile.ovpn" />
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Username <small>(optional)</small></label>
+            <input id="ovpn-username" class="input" type="text" placeholder="VPN username" autocomplete="username" />
+          </div>
+          <div class="field">
+            <label>Password <small>(optional)</small></label>
+            <input id="ovpn-password" class="input" type="password" placeholder="VPN password" autocomplete="current-password" />
+          </div>
+        </div>
+
+        <label class="check-label" style="margin-top:4px">
+          <input type="checkbox" id="ovpn-save-creds" />
+          Remember credentials
+        </label>
+
+        <div class="card-btns">
+          <button id="ovpn-btn-connect" class="btn btn-green btn-touch" onclick="ovpnConnect()">Connect</button>
+          <button id="ovpn-btn-stop" class="btn btn-red btn-touch hidden" onclick="ovpnStop()">Disconnect</button>
+        </div>
+      </div>
+
+      <div class="card-foot" id="ovpn-status-msg">Not connected</div>
+      <button class="btn-expand" onclick="toggleOvpnLogs()">
+        <span id="ovpn-logs-toggle-text">Show Logs</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div id="ovpn-logs-container" class="hidden">
+        <div id="ovpn-logs" class="logs-box"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ─── Page: V2Ray ─────────────────────────────── -->
+  <div class="page hidden" id="page-v2ray">
+    <div class="page-top">
+      <h2>V2Ray</h2>
+      <div class="page-top-right">
+        <div id="xui-pill" class="pill">
+          <span class="pill-dot"></span>
+          <span id="xui-pill-text">--</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-tabs -->
+    <div class="sub-tabs" style="margin-bottom:16px">
+      <button class="sub-tab active" data-subtab="v2ray-local" onclick="switchV2rayTab('local')">Local</button>
+      <button class="sub-tab" data-subtab="v2ray-remote" onclick="switchV2rayTab('remote')">Remote 3X-UI</button>
+    </div>
+
+    <!-- ─── Local Tab ─── -->
+    <div id="v2ray-tab-local">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-row" style="flex-wrap:wrap;gap:8px">
+          <div id="local-xray-pill" class="pill">
+            <span class="pill-dot"></span>
+            <span id="local-xray-pill-text">Stopped</span>
+          </div>
+          <div style="display:flex;gap:6px;margin-left:auto">
+            <button class="btn btn-sm btn-green" id="local-xray-start-btn" onclick="startLocalXray()">Start</button>
+            <button class="btn btn-sm btn-red hidden" id="local-xray-stop-btn" onclick="stopLocalXray()">Stop</button>
+            <button class="btn btn-sm" onclick="restartLocalXray()">Restart</button>
+          </div>
+        </div>
+        <div class="card-row" style="flex-wrap:wrap;gap:8px;margin-top:10px;align-items:end">
+          <div class="field" style="flex:1;min-width:180px">
+            <label>Outbound</label>
+            <select id="local-xray-outbound" class="input" onchange="saveLocalXrayOutbound()">
+              <option value="direct">Direct (Freedom)</option>
+            </select>
+          </div>
+          <div class="field" id="local-xray-socks-fields" style="display:none;flex:0 0 auto">
+            <label>SOCKS Host:Port</label>
+            <div style="display:flex;gap:4px">
+              <input type="text" id="local-xray-socks-host" class="input" value="127.0.0.1" style="width:110px" onchange="saveLocalXrayOutbound()" />
+              <input type="number" id="local-xray-socks-port" class="input" value="10808" min="1" max="65535" style="width:80px" onchange="saveLocalXrayOutbound()" />
+            </div>
+          </div>
+        </div>
+        <div id="local-xray-socks-note" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.2);border-radius:8px;font-size:12px;color:rgba(255,255,255,.6)">
+          <strong style="color:#fbbf24">Note:</strong> If some HTTPS sites (e.g. claude.ai) show <em>CERTIFICATE_VERIFICATION_ERROR</em>, your SSH server's network may be performing TLS inspection for those domains. Use a different SSH server, or add a routing rule to send those domains via <strong>direct</strong> instead.
+        </div>
+      </div>
+
+      <!-- Add account -->
+      <div class="section-header" style="margin-bottom:8px">
+        <h3 class="section-title">Accounts</h3>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" id="acc-search" class="input" placeholder="Search..." style="width:160px;padding:6px 10px;font-size:12px" oninput="filterAccounts()" />
+          <button class="btn btn-sm btn-primary" onclick="openAddLocalAccount()">+ Add</button>
+        </div>
+      </div>
+      <div id="local-accounts-list" class="acc-table-wrap">
+        <div class="empty"><p>No accounts yet</p></div>
+      </div>
+
+      <!-- Local logs -->
+      <div id="local-xray-logs-section" class="hidden" style="margin-top:16px">
+        <div class="section-header" style="margin-bottom:8px">
+          <h3 class="section-title">Logs</h3>
+          <button class="btn btn-sm btn-ghost" onclick="refreshLocalXrayLogs()">Refresh</button>
+        </div>
+        <pre id="local-xray-logs-output" class="log-box"></pre>
+      </div>
+    </div>
+
+    <!-- ─── Remote Tab ─── -->
+    <div id="v2ray-tab-remote" class="hidden">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+        <button class="btn btn-ghost btn-sm" onclick="loadXuiData()" title="Refresh">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          Refresh
+        </button>
+      </div>
+
+      <!-- Not configured state -->
+      <div id="xui-not-configured" class="empty">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="1" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        <p>3X-UI panel not configured</p>
+        <p class="hint">Go to Settings to add your panel URL and credentials</p>
+      </div>
+
+      <!-- Skeleton -->
+      <div id="xui-skeleton" class="hidden">
+        <div class="skel-card"><div class="skel-row"><div style="flex:1"><div class="skel-line w-40"></div><div class="skel-line w-80" style="margin-top:8px"></div></div><div class="skel-btn"></div></div></div>
+        <div class="skel-card"><div class="skel-row"><div style="flex:1"><div class="skel-line w-60"></div><div class="skel-line w-80" style="margin-top:8px"></div></div><div class="skel-btn"></div></div></div>
+      </div>
+
+      <!-- Server stats bar -->
+      <div id="xui-server-stats" class="stats-row hidden">
+        <div class="stat-chip"><span class="stat-lbl">CPU</span><span id="xui-srv-cpu" class="stat-val">--</span></div>
+        <div class="stat-chip"><span class="stat-lbl">Mem</span><span id="xui-srv-mem" class="stat-val">--</span></div>
+        <div class="stat-chip"><span class="stat-lbl">Up</span><span id="xui-srv-uptime" class="stat-val">--</span></div>
+        <div class="stat-chip"><span class="stat-lbl">Xray</span><span id="xui-srv-xray" class="stat-val">--</span></div>
+      </div>
+
+      <!-- Inbounds list -->
+      <div id="xui-inbounds"></div>
+
+      <!-- Outbounds Section -->
+      <div id="xui-outbounds-section" class="hidden" style="margin-top:20px">
+        <div class="section-header">
+          <h3 class="section-title">Outbounds</h3>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-sm btn-primary" onclick="openAddOutbound()">+ Add</button>
+            <button class="btn btn-sm btn-green" onclick="saveAndRestartXray()">Save &amp; Restart</button>
+          </div>
+        </div>
+        <div id="xui-outbounds-list" style="margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add local account modal -->
+  <div class="modal-overlay hidden" id="local-account-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="local-account-modal-title">Add Account</h3>
+        <button class="btn-icon" onclick="$('local-account-modal').classList.add('hidden')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="local-acc-edit-id" />
+        <div class="field">
+          <label>Name</label>
+          <input type="text" id="local-acc-name" class="input" placeholder="User name" />
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>Protocol</label>
+          <select id="local-acc-protocol" class="input">
+            <option value="vless">VLESS</option>
+            <option value="vmess">VMess</option>
+          </select>
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>Port</label>
+          <input type="number" id="local-acc-port" class="input" value="443" min="1" max="65535" />
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>Listen Address</label>
+          <select id="local-acc-listen" class="input">
+            <option value="0.0.0.0">0.0.0.0 (all interfaces)</option>
+            <option value="127.0.0.1">127.0.0.1</option>
+          </select>
+        </div>
+        <div class="field-row" style="margin-top:8px">
+          <div class="field">
+            <label>Bandwidth Limit</label>
+            <div style="display:flex;gap:4px">
+              <input type="number" id="local-acc-bw-value" class="input" placeholder="0" min="0" style="flex:1" />
+              <select id="local-acc-bw-unit" class="input" style="width:70px">
+                <option value="gb">GB</option>
+                <option value="mb">MB</option>
+                <option value="tb">TB</option>
+              </select>
+            </div>
+            <span class="hint" style="font-size:10px;color:var(--t3)">0 = unlimited</span>
+          </div>
+          <div class="field">
+            <label>Max Unique IPs</label>
+            <input type="number" id="local-acc-max-conn" class="input" placeholder="0" min="0" />
+            <span class="hint" style="font-size:10px;color:var(--t3)">0 = unlimited</span>
+          </div>
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>Assigned Xray Tunnel</label>
+          <select id="local-acc-assigned-xray" class="input">
+            <option value="">Legacy default</option>
+          </select>
+          <span class="hint" style="font-size:10px;color:var(--t3)">Choose which saved Xray tunnel this account should use by default.</span>
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>Expiration</label>
+          <div style="display:flex;gap:4px">
+            <input type="number" id="local-acc-exp-value" class="input" placeholder="0" min="0" style="flex:1" />
+            <select id="local-acc-exp-unit" class="input" style="width:80px">
+              <option value="days">Days</option>
+              <option value="hours">Hours</option>
+              <option value="months">Months</option>
+            </select>
+          </div>
+          <span class="hint" style="font-size:10px;color:var(--t3)">0 = never expires. Counted from now (or creation time for existing accounts).</span>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-ghost btn-sm" onclick="$('local-account-modal').classList.add('hidden')">Cancel</button>
+          <button class="btn btn-primary btn-sm" onclick="submitLocalAccount()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="route-modal">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3 id="route-modal-title">Add Rule</h3>
+        <button class="btn-icon" onclick="$('route-modal').classList.add('hidden')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="route-edit-id" />
+        <div class="field-row" style="gap:8px">
+          <div class="field" style="flex:1">
+            <label>Type</label>
+            <select id="route-type" class="input" onchange="updateRoutePatternHint()">
+              <option value="domain">Domain</option>
+              <option value="ip">IP / CIDR</option>
+            </select>
+          </div>
+          <div class="field" style="flex:1">
+            <label>Action</label>
+            <select id="route-outbound" class="input">
+              <option value="direct">Direct</option>
+              <option value="proxy">Proxy</option>
+              <option value="block">Block</option>
+            </select>
+          </div>
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>Pattern</label>
+          <textarea id="route-pattern" class="input" rows="2" style="resize:vertical;font-family:var(--mono);font-size:12px" placeholder="geosite:ir, domain:google.com"></textarea>
+          <div id="route-pattern-hint" style="font-size:11px;color:var(--t3);margin-top:4px;line-height:1.6"></div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="$('route-modal').classList.add('hidden')">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="submitRoute()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Page: Xray Local ──────────────────────────── -->
+  <div class="page hidden" id="page-xray">
+    <div class="page-top">
+      <h2>Xray</h2>
+      <div class="page-top-right">
+        <div id="xray-local-pill" class="pill">
+          <span class="pill-dot"></span>
+          <span id="xray-local-pill-text">Stopped</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status bar: ports + start/stop unified -->
+    <div class="card xray-status-bar" style="margin-bottom:16px">
+      <div class="field-row" style="align-items:flex-end;gap:8px;flex-wrap:wrap">
+        <div class="field" style="flex:1;min-width:200px">
+          <label>Config Link</label>
+          <div style="display:flex;gap:6px">
+            <input type="text" id="xray-config-input" class="input" style="flex:1" placeholder="vless://... vmess://... trojan://... ss://..." />
+            <button class="btn btn-primary btn-sm" onclick="addXrayConfig()">Add</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;padding-bottom:1px">
+          <button class="btn btn-red btn-sm hidden" id="xray-stop-all-btn" onclick="stopXrayLocal()">Stop All</button>
+        </div>
+      </div>
+      <div class="card-meta" id="xray-local-summary" style="margin-top:8px">No Xray tunnels running.</div>
+    </div>
+
+    <!-- Configs list -->
+    <div class="section-header" style="margin-bottom:8px">
+      <h3 class="section-title">Configs</h3>
+    </div>
+    <div id="xray-configs-list">
+      <div class="empty"><p>No configs added yet</p></div>
+    </div>
+
+    <!-- Xray Logs (shown when running) -->
+    <div id="xray-logs-section" class="hidden" style="margin-top:16px">
+      <div class="section-header" style="margin-bottom:8px">
+        <h3 class="section-title">Logs</h3>
+        <button class="btn btn-sm btn-ghost" onclick="refreshXrayLogs()">Refresh</button>
+      </div>
+      <pre id="xray-logs-output" class="log-box"></pre>
+    </div>
+
+    <!-- Scanner -->
+    <div class="section-header" style="margin:20px 0 8px">
+      <h3 class="section-title">IP Scanner</h3>
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="field">
+        <label>Config to test</label>
+        <select id="scan-config-select" class="input">
+          <option value="">Select a saved config...</option>
+        </select>
+      </div>
+      <div class="field" style="margin-top:8px">
+        <label>CIDR Ranges <span class="hint">(one per line, supports /32 and plain IPs)</span></label>
+        <textarea id="scan-cidrs" class="input" style="min-height:60px;resize:vertical" placeholder="104.16.0.0/16&#10;172.67.0.0/16&#10;78.39.179.140" oninput="scheduleScanEstimate()"></textarea>
+        <div id="scan-ip-hint" style="font-size:11px;color:var(--t3);margin-top:3px"></div>
+      </div>
+      <div class="field-row" style="margin-top:8px;align-items:flex-end;flex-wrap:wrap;gap:8px">
+        <div class="field" style="flex:0 0 90px">
+          <label>Concurrency</label>
+          <input type="number" id="scan-concurrency" class="input" value="10" min="1" max="100" />
+        </div>
+        <div class="field" style="flex:0 0 90px">
+          <label>Timeout (s)</label>
+          <input type="number" id="scan-timeout" class="input" value="5" min="1" max="30" />
+        </div>
+        <div class="field" style="flex:0 0 90px">
+          <label>Max IPs</label>
+          <input type="number" id="scan-max" class="input" value="100" min="1" max="5000" oninput="scheduleScanEstimate()" />
+        </div>
+        <div style="display:flex;gap:6px;padding-bottom:1px">
+          <button class="btn btn-primary btn-sm" onclick="startScan()">Scan</button>
+          <button class="btn btn-red btn-sm hidden" id="scan-stop-btn" onclick="stopScan()">Stop</button>
+        </div>
+      </div>
+    </div>
+    <!-- Scan progress & results -->
+    <div id="scan-progress" class="hidden" style="margin-bottom:12px">
+      <div class="scan-progress-bar"><div class="scan-progress-fill" id="scan-fill"></div></div>
+      <div class="card-meta" id="scan-status" style="margin-top:4px">Scanning...</div>
+    </div>
+    <div id="scan-summary" class="hidden" style="margin-bottom:12px">
+      <div class="card">
+        <div class="card-row" style="flex-wrap:wrap;gap:8px">
+          <span id="scan-summary-text" class="card-title" style="flex:1"></span>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-sm" onclick="showScanResults()">View IPs</button>
+            <button class="btn btn-sm btn-primary" onclick="copyScanConfigs()">Copy Configs</button>
+            <button class="btn btn-sm btn-green" onclick="downloadScanConfigs()">Download</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scan results modal -->
+  <div class="modal-overlay hidden" id="scan-results-modal">
+    <div class="modal" style="max-width:500px">
+      <div class="modal-header">
+        <h3>Working IPs</h3>
+        <button class="btn-icon" onclick="$('scan-results-modal').classList.add('hidden')">&times;</button>
+      </div>
+      <div class="modal-body" style="max-height:60vh;overflow:auto">
+        <div id="scan-results-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Page: Statistics ─────────────────────────── -->
+  <!-- ─── OpenVPN Server Page ────────────────────── -->
+  <div class="page hidden" id="page-ovpn-server">
+    <div class="page-top">
+      <h2>OpenVPN Server</h2>
+      <div id="ovpn-server-pill" class="pill">
+        <span class="pill-dot"></span>
+        <span id="ovpn-server-pill-text">Stopped</span>
+      </div>
+    </div>
+
+    <!-- Install check -->
+    <div id="ovpn-server-not-installed" class="card hidden" style="text-align:center;padding:24px">
+      <p style="margin-bottom:12px">OpenVPN server is not installed yet.</p>
+      <button class="btn btn-primary" onclick="installVpnServers()">Install VPN Servers</button>
+      <pre id="vpn-install-log" class="hidden" style="text-align:left;max-height:300px;overflow:auto;margin-top:12px;font-size:12px;background:var(--bg-card);padding:12px;border-radius:8px"></pre>
+    </div>
+
+    <div id="ovpn-server-main">
+      <!-- Routing Status -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-row" style="align-items:center">
+          <div>
+            <div class="card-title">Traffic Routing</div>
+            <div class="card-meta" id="routing-status-text">Redsocks: stopped | SOCKS: --</div>
+          </div>
+          <div class="field" style="margin-left:auto;min-width:220px">
+            <label>SOCKS Source</label>
+            <select id="routing-socks-select" class="input">
+              <option value="">Auto-detect</option>
+            </select>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-green btn-touch" id="btn-routing-start" onclick="startRouting()">Start Routing</button>
+            <button class="btn btn-red btn-touch hidden" id="btn-routing-stop" onclick="stopRouting()">Stop Routing</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Server control -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-row" style="align-items:center">
+          <div>
+            <div class="card-title">OpenVPN Service</div>
+            <div class="card-meta" id="ovpn-server-status-text">Stopped</div>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-green btn-touch" id="btn-ovpn-start" onclick="startOvpnServer()">Start</button>
+            <button class="btn btn-red btn-touch hidden" id="btn-ovpn-stop" onclick="stopOvpnServer()">Stop</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Debug logs -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-row" style="align-items:center;margin-bottom:8px">
+          <div>
+            <div class="card-title">Routing Logs</div>
+            <div class="card-meta">redsocks, dns2socks, and iptables messages</div>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-ghost btn-sm" onclick="copyRoutingLogs()">Copy</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearRoutingLogs()">Clear</button>
+            <button class="btn btn-ghost btn-sm" onclick="refreshRoutingLogs()">Refresh</button>
+          </div>
+        </div>
+        <pre id="routing-logs-output" class="log-box">No routing logs yet</pre>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-row" style="align-items:center;margin-bottom:8px">
+          <div>
+            <div class="card-title">OpenVPN Log Tail</div>
+            <div class="card-meta">Recent lines from /var/log/openvpn.log</div>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-ghost btn-sm" onclick="copyOvpnServerLogs()">Copy</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearOvpnServerLogs()">Clear</button>
+            <button class="btn btn-ghost btn-sm" onclick="refreshOvpnServerLogs()">Refresh</button>
+          </div>
+        </div>
+        <pre id="ovpn-server-logs-output" class="log-box">No OpenVPN log output yet</pre>
+      </div>
+
+      <!-- Connected clients -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:8px">Connected Clients</div>
+        <div id="ovpn-connected-clients" class="card-meta">No clients connected</div>
+      </div>
+
+      <!-- Max users -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-row" style="align-items:center">
+          <div>
+            <div class="card-title">Max Users Limit</div>
+            <div class="card-meta">0 = unlimited</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="number" id="ovpn-max-users" class="input" style="width:80px" min="0" placeholder="0" />
+            <button class="btn btn-primary" onclick="saveOvpnMaxUsers()" style="padding:6px 12px">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Users -->
+      <div class="page-top" style="margin-top:16px">
+        <h3>Users</h3>
+        <button class="btn btn-primary" onclick="addOvpnUser()">+ Add User</button>
+      </div>
+      <div id="ovpn-users-list" class="cards-container"></div>
+    </div>
+  </div>
+
+  <!-- ─── L2TP/IPsec Page ─────────────────────────── -->
+  <div class="page hidden" id="page-l2tp">
+    <div class="page-top">
+      <h2>L2TP / IPsec</h2>
+      <div id="l2tp-pill" class="pill">
+        <span class="pill-dot"></span>
+        <span id="l2tp-pill-text">Stopped</span>
+      </div>
+    </div>
+
+    <div id="l2tp-not-installed" class="card hidden" style="text-align:center;padding:24px">
+      <p style="margin-bottom:12px">L2TP/IPsec server is not installed yet.</p>
+      <button class="btn btn-primary" onclick="installVpnServers()">Install VPN Servers</button>
+    </div>
+
+    <div id="l2tp-main">
+      <!-- Server control -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-row" style="align-items:center">
+          <div>
+            <div class="card-title">L2TP/IPsec Service</div>
+            <div class="card-meta" id="l2tp-status-text">Stopped</div>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-green btn-touch" id="btn-l2tp-start" onclick="startL2tpServer()">Start</button>
+            <button class="btn btn-red btn-touch hidden" id="btn-l2tp-stop" onclick="stopL2tpServer()">Stop</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PSK + connection info -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:8px">Connection Info</div>
+        <div class="card-meta">
+          <strong>Pre-Shared Key:</strong> <code id="l2tp-psk" style="user-select:all">--</code><br>
+          <strong>Subnet:</strong> 10.9.0.0/24<br>
+          <strong>Ports:</strong> 500/udp (IKE), 4500/udp (NAT-T), 1701/udp (L2TP)
+        </div>
+      </div>
+
+      <!-- Connected clients -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:8px">Connected Clients</div>
+        <div id="l2tp-connected-clients" class="card-meta">No clients connected</div>
+      </div>
+
+      <!-- Max users -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-row" style="align-items:center">
+          <div>
+            <div class="card-title">Max Users Limit</div>
+            <div class="card-meta">0 = unlimited</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="number" id="l2tp-max-users" class="input" style="width:80px" min="0" placeholder="0" />
+            <button class="btn btn-primary" onclick="saveL2tpMaxUsers()" style="padding:6px 12px">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Users -->
+      <div class="page-top" style="margin-top:16px">
+        <h3>Users</h3>
+        <button class="btn btn-primary" onclick="addL2tpUser()">+ Add User</button>
+      </div>
+      <div id="l2tp-users-list" class="cards-container"></div>
+    </div>
+  </div>
+
+  <div class="page hidden" id="page-statistics">
+    <div class="page-top">
+      <h2>Statistics</h2>
+      <div id="sys-uptime-pill" class="pill">
+        <span class="pill-dot"></span>
+        <span id="sys-uptime-text">--</span>
+      </div>
+    </div>
+
+    <div id="stats-skeleton">
+      <div class="skel-card"><div class="skel-line w-40"></div><div class="skel-grid" style="margin-top:10px"><div class="skel-stat"><div class="skel-line h-8 w-60"></div><div class="skel-line h-20 w-full"></div></div><div class="skel-stat"><div class="skel-line h-8 w-60"></div><div class="skel-line h-20 w-full"></div></div><div class="skel-stat"><div class="skel-line h-8 w-60"></div><div class="skel-line h-20 w-full"></div></div></div></div>
+      <div class="skel-card"><div class="skel-line w-40"></div><div class="skel-grid two-col" style="margin-top:10px"><div class="skel-stat"><div class="skel-line h-8 w-60"></div><div class="skel-line h-20 w-full"></div></div><div class="skel-stat"><div class="skel-line h-8 w-60"></div><div class="skel-line h-20 w-full"></div></div></div></div>
+      <div class="skel-card"><div class="skel-line w-40"></div><div class="skel-grid" style="margin-top:10px"><div class="skel-stat"><div class="skel-line h-8 w-60"></div><div class="skel-line h-20 w-full"></div></div><div class="skel-stat"><div class="skel-line h-8 w-60"></div><div class="skel-line h-20 w-full"></div></div><div class="skel-stat"><div class="skel-line h-8 w-60"></div><div class="skel-line h-20 w-full"></div></div></div></div>
+    </div>
+
+    <!-- System -->
+    <div class="card hidden" id="stats-system-card">
+      <div class="card-title">System</div>
+      <div class="sys-stats-grid">
+        <div class="sys-stat">
+          <div class="sys-stat-label">CPU Load</div>
+          <div class="sys-stat-value" id="sys-cpu">--</div>
+          <div class="sys-stat-bar"><div class="sys-stat-fill cpu-fill" id="sys-cpu-bar"></div></div>
+        </div>
+        <div class="sys-stat">
+          <div class="sys-stat-label">Memory</div>
+          <div class="sys-stat-value" id="sys-mem">--</div>
+          <div class="sys-stat-bar"><div class="sys-stat-fill mem-fill" id="sys-mem-bar"></div></div>
+        </div>
+        <div class="sys-stat">
+          <div class="sys-stat-label">Battery</div>
+          <div class="sys-stat-value" id="sys-battery">--</div>
+          <div class="sys-stat-bar"><div class="sys-stat-fill batt-fill" id="sys-battery-bar"></div></div>
+        </div>
+      </div>
+      <div class="kv-grid" style="margin-top:12px">
+        <span class="kv-k">Platform</span><span class="kv-v" id="sys-platform">--</span>
+        <span class="kv-k">Hostname</span><span class="kv-v" id="sys-hostname">--</span>
+        <span class="kv-k">Uptime</span><span class="kv-v" id="sys-os-uptime">--</span>
+        <span class="kv-k">CPUs</span><span class="kv-v" id="sys-cpus">--</span>
+      </div>
+    </div>
+
+    <!-- Network -->
+    <div class="card hidden" id="stats-network-card">
+      <div class="card-title">Network I/O</div>
+      <div class="sys-stats-grid two-col">
+        <div class="sys-stat">
+          <div class="sys-stat-label">Download</div>
+          <div class="sys-stat-value accent" id="sys-net-rx">--</div>
+        </div>
+        <div class="sys-stat">
+          <div class="sys-stat-label">Upload</div>
+          <div class="sys-stat-value accent" id="sys-net-tx">--</div>
+        </div>
+        <div class="sys-stat">
+          <div class="sys-stat-label">DL Speed</div>
+          <div class="sys-stat-value" id="sys-net-rx-rate">--</div>
+        </div>
+        <div class="sys-stat">
+          <div class="sys-stat-label">UL Speed</div>
+          <div class="sys-stat-value" id="sys-net-tx-rate">--</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connections -->
+    <div class="card hidden" id="stats-conn-card">
+      <div class="card-title">Connections</div>
+      <div class="sys-stats-grid three-col">
+        <div class="sys-stat">
+          <div class="sys-stat-label">Total</div>
+          <div class="sys-stat-value big" id="sys-conn-total">0</div>
+        </div>
+        <div class="sys-stat">
+          <div class="sys-stat-label">Unique IPs</div>
+          <div class="sys-stat-value big" id="sys-conn-unique">0</div>
+        </div>
+        <div class="sys-stat">
+          <div class="sys-stat-label">Peak</div>
+          <div class="sys-stat-value big" id="sys-conn-peak">0</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Page: Settings ──────────────────────────── -->
+  <div class="page hidden" id="page-settings">
+    <div class="page-top">
+      <h2>Settings</h2>
+    </div>
+
+    <div id="settings-skeleton">
+      <div class="skel-card"><div class="skel-line w-40"></div><div class="skel-line w-80" style="margin-top:10px"></div><div class="skel-line w-40" style="margin-top:6px"></div></div>
+      <div class="skel-card"><div class="skel-line w-40"></div><div class="skel-row" style="margin-top:10px"><div class="skel-btn"></div><div class="skel-btn"></div></div></div>
+    </div>
+
+    <!-- Settings Tabs -->
+    <div class="settings-tabs hidden" id="settings-tabs">
+      <button class="settings-tab active" data-stab="general" onclick="switchSettingsTab('general')">General</button>
+      <button class="settings-tab" data-stab="admin" onclick="switchSettingsTab('admin')">Admin</button>
+      <button class="settings-tab" data-stab="vpn" onclick="switchSettingsTab('vpn')">VPN</button>
+      <button class="settings-tab" data-stab="dns" onclick="switchSettingsTab('dns')">DNS</button>
+      <button class="settings-tab" data-stab="routing" onclick="switchSettingsTab('routing')">Routing</button>
+      <button class="settings-tab" data-stab="xray" onclick="switchSettingsTab('xray')">Xray</button>
+      <button class="settings-tab" data-stab="deploy" onclick="switchSettingsTab('deploy')">Deploy</button>
+    </div>
+
+    <!-- General Tab -->
+    <div class="settings-pane" id="stab-general">
+      <div class="card" id="settings-notif-card">
+        <div class="card-title">Push Notifications</div>
+        <label class="check-label" style="margin-top:8px">
+          <input type="checkbox" id="notif-toggle" onchange="toggleNotifications(this.checked)" />
+          Alert on tunnel &amp; VPN events
+        </label>
+        <div class="card-foot" id="notif-status">Disabled</div>
+      </div>
+
+      <div class="card" id="settings-config-card">
+        <div class="card-title">Configuration</div>
+        <div class="card-btns" style="margin-top:8px">
+          <button class="btn btn-primary btn-touch" onclick="exportConfig()">Export</button>
+          <label class="btn btn-ghost btn-touch upload-btn">
+            Import
+            <input type="file" id="config-import-input" accept=".json" hidden onchange="importConfig(this)" />
+          </label>
+        </div>
+        <div class="card-foot">Full backup: tunnels, accounts, xray configs, profiles &amp; settings</div>
+      </div>
+
+      <div class="card" id="settings-xui-card">
+        <div class="card-title">3X-UI Panel</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+          <div class="field">
+            <label>Panel URL</label>
+            <input type="text" id="xui-url" class="input" placeholder="http://185.18.214.178:10203" />
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Username</label>
+              <input type="text" id="xui-username" class="input" placeholder="admin" />
+            </div>
+            <div class="field">
+              <label>Password</label>
+              <input type="password" id="xui-password" class="input" placeholder="password" />
+            </div>
+          </div>
+          <div class="card-btns">
+            <button class="btn btn-primary btn-touch" onclick="saveXuiConfig()">Save</button>
+            <button class="btn btn-ghost btn-touch" onclick="testXuiConnection()">Test</button>
+          </div>
+        </div>
+        <div class="card-foot" id="xui-config-status">Not configured</div>
+      </div>
+    </div>
+
+    <!-- Admin Tab -->
+    <div class="settings-pane hidden" id="stab-admin">
+      <div class="card" id="settings-admin-card">
+        <div class="card-title">Admin Credentials</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+          <div class="field">
+            <label>Username</label>
+            <input type="text" id="admin-username" class="input" placeholder="admin" />
+          </div>
+          <div class="field">
+            <label>Current Password</label>
+            <input type="password" id="admin-current-pass" class="input" placeholder="Enter current password" />
+          </div>
+          <div class="field">
+            <label>New Password</label>
+            <input type="password" id="admin-new-pass" class="input" placeholder="Leave empty to keep current" />
+          </div>
+          <div class="card-btns">
+            <button class="btn btn-primary btn-touch" onclick="saveAdminCredentials()">Save</button>
+          </div>
+        </div>
+        <div class="card-foot" id="admin-cred-status">Change username or password</div>
+      </div>
+    </div>
+
+    <!-- VPN Tab -->
+    <div class="settings-pane hidden" id="stab-vpn">
+      <div class="card" id="settings-oc-card">
+        <div class="card-title">OpenConnect Mode</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+          <div class="field">
+            <label>Mode</label>
+            <select id="oc-mode-select" class="input" onchange="onOcModeChange()">
+              <option value="local">Run Locally</option>
+              <option value="network">Scan Network (Remote Agent)</option>
+            </select>
+          </div>
+          <div id="oc-local-config" class="hidden" style="display:flex;flex-direction:column;gap:10px">
+            <div class="field">
+              <label>VPN Server URL</label>
+              <input type="text" id="oc-cfg-url" class="input" placeholder="vpn.example.com" />
+            </div>
+            <div class="field">
+              <label>Auth Group</label>
+              <input type="text" id="oc-cfg-authgroup" class="input" placeholder="HQ (optional)" />
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Username</label>
+                <input type="text" id="oc-cfg-username" class="input" placeholder="user" />
+              </div>
+              <div class="field">
+                <label>Password</label>
+                <input type="password" id="oc-cfg-password" class="input" placeholder="password" />
+              </div>
+            </div>
+          </div>
+          <div class="card-btns">
+            <button class="btn btn-primary btn-touch" onclick="saveOcSettings()">Save</button>
+          </div>
+        </div>
+        <div class="card-foot" id="oc-settings-status">Loading...</div>
+      </div>
+    </div>
+
+    <div class="settings-pane hidden" id="stab-dns">
+      <div class="card" id="settings-dns-card">
+        <div class="card-title">VPN DNS</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+          <div class="field">
+            <label>DNS Servers</label>
+            <div id="dns-server-fields" style="display:flex;flex-direction:column;gap:8px"></div>
+            <div class="card-btns" style="margin-top:8px">
+              <button class="btn btn-ghost btn-touch" type="button" onclick="addDnsServerField()">+ Add Server</button>
+            </div>
+            <span class="hint" style="font-size:10px;color:var(--t3)">These IPs will be written to `/etc/resolv.conf` while OpenConnect/OpenVPN is active.</span>
+          </div>
+          <div class="field">
+            <label>IP Update URL <span class="hint">(optional)</span></label>
+            <input type="text" id="dns-update-url" class="input" placeholder="https://provider.example.com/update?token=..." />
+            <span class="hint" style="font-size:10px;color:var(--t3)">Use this when your DNS provider needs a request to update your current IP before the resolvers work.</span>
+          </div>
+          <div class="card-btns">
+            <button class="btn btn-primary btn-touch" type="button" onclick="saveDnsSettings()">Save</button>
+            <button class="btn btn-ghost btn-touch" type="button" onclick="runDnsUpdateUrl()">Run Curl</button>
+          </div>
+        </div>
+        <div class="card-foot" id="dns-settings-status">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Xray Tab -->
+    <!-- Routing Tab -->
+    <div class="settings-pane hidden" id="stab-routing">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div class="card-title" style="display:flex;align-items:center;gap:8px">
+            Xray Routing Rules
+            <span id="route-count" class="badge" style="display:none">0</span>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <select id="domain-strategy" class="input" style="font-size:11px;padding:4px 6px;width:auto" onchange="saveDomainStrategy()" title="Domain matching strategy">
+              <option value="AsIs">AsIs</option>
+              <option value="IPIfNonMatch">IPIfNonMatch</option>
+              <option value="IPOnDemand">IPOnDemand</option>
+            </select>
+            <button class="btn btn-sm btn-primary" onclick="openAddRoute()">+ Add</button>
+          </div>
+        </div>
+
+        <!-- Quick presets row -->
+        <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px" id="route-presets-inline">
+          <button class="route-preset-btn" onclick="applyRoutePreset('ir-direct')">🇮🇷 Iran Direct</button>
+          <button class="route-preset-btn" onclick="applyRoutePreset('ir-ip-direct')">🇮🇷 Iran IPs</button>
+          <button class="route-preset-btn" onclick="applyRoutePreset('private-direct')">🏠 Private IPs</button>
+          <button class="route-preset-btn" onclick="applyRoutePreset('ads-block')">🚫 Block Ads</button>
+          <button class="route-preset-btn" onclick="applyRoutePreset('cn-direct')">🇨🇳 China</button>
+        </div>
+      </div>
+
+      <!-- Rules table -->
+      <div id="local-routes-list" style="margin-top:8px">
+        <div class="empty"><p>No routing rules yet</p></div>
+      </div>
+    </div>
+
+    <div class="settings-pane hidden" id="stab-xray">
+      <div class="card" id="settings-xray-card">
+        <div class="card-title">Xray Binary</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+          <div class="field">
+            <label>Binary</label>
+            <select id="xray-binary-select" class="input" onchange="onXrayBinarySelectChange()"></select>
+          </div>
+          <div class="field hidden" id="xray-binary-custom-field">
+            <label>Custom Path</label>
+            <input type="text" id="xray-binary-custom" class="input" placeholder="/usr/local/bin/xray" />
+          </div>
+          <div class="card-btns">
+            <button class="btn btn-primary btn-touch" onclick="saveXrayBinary()">Save</button>
+          </div>
+        </div>
+        <div class="card-foot" id="xray-binary-status">Detecting...</div>
+      </div>
+    </div>
+
+    <!-- Deploy Tab -->
+    <div class="settings-pane hidden" id="stab-deploy">
+      <div class="card" id="settings-deploy-card">
+        <div class="card-title">Deploy Source Update</div>
+        <p style="font-size:12px;color:var(--t2);margin-top:8px;line-height:1.6">
+          Upload a <code style="color:var(--accent)">.tar.gz</code> archive to update the server source files. The server will restart automatically.
+        </p>
+        <div class="card-btns" style="margin-top:8px">
+          <label class="btn btn-amber btn-touch upload-btn">
+            Upload &amp; Deploy
+            <input type="file" id="deploy-input" accept=".tar.gz,.tgz,.zip,application/gzip,application/x-gzip,application/zip" hidden onchange="deployArchive(this)" />
+          </label>
+        </div>
+        <div class="card-foot" id="deploy-status">
+          CLI: <code style="color:var(--accent)">./deploy.sh host:port token</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ─── Add/Edit Tunnel Modal ──────────────────── -->
+<div id="tunnel-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">Add Tunnel</h3>
+      <button class="btn-close" id="btn-modal-close">&times;</button>
+    </div>
+    <form id="tunnel-form">
+      <input type="hidden" id="edit-tunnel-id" />
+      <div class="field">
+        <label for="input-tunnel-type">Tunnel Type</label>
+        <select id="input-tunnel-type" class="input" onchange="toggleTunnelTypeFields()">
+          <option value="reverse">Reverse (Remote &rarr; Local)</option>
+          <option value="socks">SOCKS Proxy (-D)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="input-name">Tunnel Name</label>
+        <input type="text" id="input-name" class="input" placeholder="My Server" required />
+      </div>
+      <div class="field-row">
+        <div class="field" style="flex:2">
+          <label for="input-host">SSH Host</label>
+          <input type="text" id="input-host" class="input" placeholder="185.18.214.178" required />
+        </div>
+        <div class="field" style="flex:0 0 80px">
+          <label for="input-ssh-port">Port</label>
+          <input type="number" id="input-ssh-port" class="input" placeholder="22" value="22" />
+        </div>
+      </div>
+      <div class="field">
+        <label for="input-username">Username</label>
+        <input type="text" id="input-username" class="input" placeholder="root" required />
+      </div>
+      <div id="reverse-fields">
+        <div class="field-row">
+          <div class="field">
+            <label for="input-remote-port">Remote Port</label>
+            <input type="number" id="input-remote-port" class="input" placeholder="1234" />
+          </div>
+          <div class="field">
+            <label for="input-local-port">Local Port</label>
+            <input type="number" id="input-local-port" class="input" placeholder="10808" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="input-local-host">Local Host</label>
+          <input type="text" id="input-local-host" class="input" placeholder="localhost" value="localhost" />
+        </div>
+      </div>
+      <div id="socks-fields" class="hidden">
+        <div class="field">
+          <label for="input-socks-port">SOCKS Port (-D)</label>
+          <input type="number" id="input-socks-port" class="input" placeholder="1080" />
+        </div>
+      </div>
+      <div class="field">
+        <label for="input-route-interface">Route Interface</label>
+        <select id="input-route-interface" class="input">
+          <option value="direct">Direct (no route change)</option>
+        </select>
+        <div style="font-size:11px;color:var(--t3);margin-top:3px">Choose the OpenVPN TUN device here when this SSH/SOCKS tunnel should run through OpenVPN.</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="btn-cancel" class="btn btn-ghost">Cancel</button>
+        <button type="submit" id="btn-save" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ─── Password Modal ─────────────────────────── -->
+<div id="password-modal" class="modal-overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h3>Enter Password</h3>
+      <button class="btn-close" id="btn-pw-close">&times;</button>
+    </div>
+    <form id="password-form">
+      <input type="hidden" id="pw-tunnel-id" />
+      <p id="pw-tunnel-info" class="pw-info"></p>
+      <div class="field">
+        <label for="input-password">SSH Password</label>
+        <input type="password" id="input-password" class="input" placeholder="Enter password..." required autocomplete="off" />
+      </div>
+      <label class="check-label">
+        <input type="checkbox" id="pw-remember" checked /> Remember for this session
+      </label>
+      <div class="modal-actions">
+        <button type="button" id="btn-pw-cancel" class="btn btn-ghost">Cancel</button>
+        <button type="submit" id="btn-pw-connect" class="btn btn-green">Connect</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ─── Add/Edit Client Modal ─────────────────── -->
+<div id="client-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="client-modal-title">Add Client</h3>
+      <button class="btn-close" onclick="closeClientModal()">&times;</button>
+    </div>
+    <form id="client-form" onsubmit="return submitClient(event)">
+      <input type="hidden" id="client-edit-inbound-id" />
+      <input type="hidden" id="client-edit-id" />
+      <input type="hidden" id="client-edit-protocol" />
+      <div class="field">
+        <label for="client-email">Email / Remark</label>
+        <input type="text" id="client-email" class="input" placeholder="user@example" required />
+      </div>
+      <div class="field" id="client-uuid-field">
+        <label for="client-uuid">UUID / ID</label>
+        <div style="display:flex;gap:6px">
+          <input type="text" id="client-uuid" class="input" style="flex:1" placeholder="Auto-generated" />
+          <button type="button" class="btn btn-sm btn-ghost" onclick="$('client-uuid').value=crypto.randomUUID()">Generate</button>
+        </div>
+      </div>
+      <div class="field hidden" id="client-password-field">
+        <label for="client-pw">Password</label>
+        <div style="display:flex;gap:6px">
+          <input type="text" id="client-pw" class="input" style="flex:1" placeholder="Auto-generated" />
+          <button type="button" class="btn btn-sm btn-ghost" onclick="$('client-pw').value=crypto.randomUUID()">Generate</button>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="client-total-gb">Traffic Limit (GB)</label>
+          <input type="number" id="client-total-gb" class="input" placeholder="0 = Unlimited" value="0" min="0" step="1" />
+        </div>
+        <div class="field">
+          <label for="client-limit-ip">IP Limit</label>
+          <input type="number" id="client-limit-ip" class="input" placeholder="0 = Unlimited" value="0" min="0" />
+        </div>
+      </div>
+      <div class="field">
+        <label for="client-expiry">Expiry Date</label>
+        <input type="date" id="client-expiry" class="input" />
+        <span class="hint">Leave empty for no expiry</span>
+      </div>
+      <div class="field" id="client-flow-field" style="display:none">
+        <label for="client-flow">Flow</label>
+        <select id="client-flow" class="input">
+          <option value="">None</option>
+          <option value="xtls-rprx-vision">xtls-rprx-vision</option>
+        </select>
+      </div>
+      <label class="check-label" style="margin-top:8px">
+        <input type="checkbox" id="client-enable" checked /> Enabled
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeClientModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="client-save-btn">Add Client</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ─── Add/Edit Outbound Modal ───────────────── -->
+<div id="outbound-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="outbound-modal-title">Add Outbound</h3>
+      <button class="btn-close" onclick="closeOutboundModal()">&times;</button>
+    </div>
+    <form id="outbound-form" onsubmit="return submitOutbound(event)">
+      <input type="hidden" id="outbound-edit-index" value="-1" />
+      <div class="field-row">
+        <div class="field" style="flex:1">
+          <label for="outbound-tag">Tag</label>
+          <input type="text" id="outbound-tag" class="input" placeholder="proxy" required />
+        </div>
+        <div class="field" style="flex:1">
+          <label for="outbound-protocol">Protocol</label>
+          <select id="outbound-protocol" class="input" onchange="onOutboundProtocolChange()">
+            <option value="freedom">freedom</option>
+            <option value="blackhole">blackhole</option>
+            <option value="socks">socks</option>
+            <option value="http">http</option>
+            <option value="vmess">vmess</option>
+            <option value="vless">vless</option>
+            <option value="trojan">trojan</option>
+            <option value="shadowsocks">shadowsocks</option>
+            <option value="wireguard">wireguard</option>
+            <option value="dns">dns</option>
+          </select>
+        </div>
+      </div>
+      <div id="outbound-proxy-fields">
+        <div class="field-row">
+          <div class="field" style="flex:2">
+            <label for="outbound-address">Address</label>
+            <input type="text" id="outbound-address" class="input" placeholder="server address" />
+          </div>
+          <div class="field" style="flex:0 0 90px">
+            <label for="outbound-port">Port</label>
+            <input type="number" id="outbound-port" class="input" placeholder="443" />
+          </div>
+        </div>
+        <div id="outbound-auth-fields">
+          <div class="field" id="outbound-id-field">
+            <label for="outbound-id">UUID / ID</label>
+            <div style="display:flex;gap:6px">
+              <input type="text" id="outbound-id" class="input" style="flex:1" />
+              <button type="button" class="btn btn-sm btn-ghost" onclick="$('outbound-id').value=crypto.randomUUID()">Gen</button>
+            </div>
+          </div>
+          <div class="field hidden" id="outbound-pw-field">
+            <label for="outbound-password">Password</label>
+            <input type="text" id="outbound-password" class="input" />
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="outbound-network">Network</label>
+            <select id="outbound-network" class="input">
+              <option value="tcp">tcp</option>
+              <option value="ws">ws</option>
+              <option value="grpc">grpc</option>
+              <option value="http">http/2</option>
+              <option value="quic">quic</option>
+              <option value="kcp">kcp</option>
+              <option value="httpupgrade">httpupgrade</option>
+              <option value="splithttp">splithttp</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="outbound-security">Security</label>
+            <select id="outbound-security" class="input">
+              <option value="none">none</option>
+              <option value="tls">tls</option>
+              <option value="reality">reality</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <details class="json-details" style="margin-top:10px">
+        <summary>Advanced JSON</summary>
+        <textarea id="outbound-json" class="code-editor" style="min-height:180px;margin-top:8px" spellcheck="false" placeholder="Full outbound JSON (overrides fields above)"></textarea>
+      </details>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeOutboundModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="outbound-save-btn">Add Outbound</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- QR Code Modal -->
+<div id="qr-modal" class="modal-overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal" style="max-width:340px;text-align:center">
+    <div class="modal-header">
+      <h3 id="qr-modal-title">QR Code</h3>
+      <button class="modal-close" onclick="$('qr-modal').classList.add('hidden')">&times;</button>
+    </div>
+    <div id="qr-canvas-wrap" style="padding:20px;background:#fff;border-radius:8px;margin:12px auto;display:inline-block">
+      <canvas id="qr-canvas"></canvas>
+    </div>
+    <div style="margin-top:8px">
+      <button class="btn btn-primary btn-touch" onclick="downloadQr()">Download</button>
+    </div>
+  </div>
+</div>
+
+<!-- Xray Outbound Edit Modal -->
+<div id="xray-edit-modal" class="modal-overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <h3>Edit Outbound Config</h3>
+      <button class="modal-close" onclick="$('xray-edit-modal').classList.add('hidden')">&times;</button>
+    </div>
+    <input type="hidden" id="xray-edit-id" />
+    <div style="margin-top:12px">
+      <textarea id="xray-edit-json" class="input" style="width:100%;height:320px;font-family:var(--mono);font-size:12px;resize:vertical;white-space:pre;tab-size:2" spellcheck="false"></textarea>
+    </div>
+    <div class="card-btns" style="margin-top:12px">
+      <button class="btn btn-primary btn-touch" onclick="saveXrayOutbound()">Save</button>
+      <button class="btn btn-ghost btn-touch" onclick="formatXrayEditJson()">Format</button>
+      <button class="btn btn-ghost btn-touch" onclick="$('xray-edit-modal').classList.add('hidden')">Cancel</button>
+    </div>
+    <div class="card-foot" id="xray-edit-status"></div>
+  </div>
+</div>
+
+<script src="qrcode.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
+      <button class="btn btn-primary btn-touch" onclick="downloadQr()">Download</button>
+    </div>
+  </div>
+</div>
+
+<!-- Xray Outbound Edit Modal -->
+<div id="xray-edit-modal" class="modal-overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <h3>Edit Outbound Config</h3>
+      <button class="modal-close" onclick="$('xray-edit-modal').classList.add('hidden')">&times;</button>
+    </div>
+    <input type="hidden" id="xray-edit-id" />
+    <div style="margin-top:12px">
+      <textarea id="xray-edit-json" class="input" style="width:100%;height:320px;font-family:var(--mono);font-size:12px;resize:vertical;white-space:pre;tab-size:2" spellcheck="false"></textarea>
+    </div>
+    <div class="card-btns" style="margin-top:12px">
+      <button class="btn btn-primary btn-touch" onclick="saveXrayOutbound()">Save</button>
+      <button class="btn btn-ghost btn-touch" onclick="formatXrayEditJson()">Format</button>
+      <button class="btn btn-ghost btn-touch" onclick="$('xray-edit-modal').classList.add('hidden')">Cancel</button>
+    </div>
+    <div class="card-foot" id="xray-edit-status"></div>
+  </div>
+</div>
+
+<script src="qrcode.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

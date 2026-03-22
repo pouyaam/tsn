@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In - Tunnel Manager</title>
+  <link rel="stylesheet" href="fonts/fonts.css" />
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #09090e;
+      --bg-card: rgba(18, 18, 28, 0.65);
+      --border: rgba(255,255,255,0.08);
+      --border-hi: rgba(255,255,255,0.2);
+      --t1: #ffffff;
+      --t2: rgba(255,255,255,0.65);
+      --t3: rgba(255,255,255,0.4);
+      --accent: #7c7ff9;
+      --accent-dim: rgba(124,127,249,0.25);
+      --red: #f87171;
+      --red-dim: rgba(248,113,113,0.12);
+      --font: 'Inter', system-ui, sans-serif;
+      --r: 12px;
+      --r-lg: 16px;
+    }
+    body {
+      font-family: var(--font);
+      background: radial-gradient(circle at 15% 50%, rgba(124, 127, 249, 0.15), transparent 50%),
+                  radial-gradient(circle at 85% 30%, rgba(52, 211, 153, 0.1), transparent 50%),
+                  var(--bg);
+      background-size: cover;
+      color: var(--t1);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-font-smoothing: antialiased;
+    }
+    .login-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 40px 36px;
+      width: 380px;
+      max-width: 92vw;
+      box-shadow: 0 24px 80px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,0.05);
+      animation: slideUp .4s cubic-bezier(.4,0,.2,1);
+    }
+    .login-header { text-align: center; margin-bottom: 32px; }
+    .login-header svg { margin-bottom: 16px; }
+    .login-header h1 { font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
+    .login-header p { font-size: 13px; color: var(--t3); margin-top: 6px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block; font-size: 11px; font-weight: 600; color: var(--t3);
+      margin-bottom: 6px; text-transform: uppercase; letter-spacing: .05em;
+    }
+    .form-group input {
+      width: 100%; padding: 11px 14px; background: rgba(0,0,0,0.2);
+      border: 1px solid var(--border); border-radius: var(--r);
+      color: var(--t1); font-family: var(--font); font-size: 14px;
+      outline: none; transition: all .2s;
+    }
+    .form-group input::placeholder { color: var(--t3); }
+    .form-group input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); transform: translateY(-1px); }
+    .btn-login {
+      width: 100%; padding: 12px; border-radius: var(--r); border: none;
+      font-family: var(--font); font-size: 14px; font-weight: 600;
+      cursor: pointer; background: var(--accent); color: #fff;
+      margin-top: 10px; transition: all .2s;
+    }
+    .btn-login:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(124,127,249,0.3); }
+    .btn-login:active { transform: scale(0.96); box-shadow: 0 4px 8px rgba(124,127,249,0.2); }
+    .error-msg {
+      background: var(--red-dim); border: 1px solid rgba(248,113,113,0.2);
+      color: var(--red); padding: 10px 14px; border-radius: var(--r);
+      font-size: 13px; margin-bottom: 16px; text-align: center;
+    }
+    .hidden { display: none !important; }
+    @keyframes slideUp { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:translateY(0) } }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="login-header">
+      <svg width="40" height="40" viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx="8" fill="url(#g)"/>
+        <path d="M8 16h16M16 8v16" stroke="rgba(255,255,255,.85)" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="16" cy="16" r="4" fill="rgba(255,255,255,.15)" stroke="rgba(255,255,255,.7)" stroke-width="1.5"/>
+        <defs><linearGradient id="g" x1="0" y1="0" x2="32" y2="32"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs>
+      </svg>
+      <h1>Tunnel Manager</h1>
+      <p>Admin sign in</p>
+    </div>
+    <div id="error-msg" class="error-msg hidden">Invalid username or password</div>
+
+    <form id="login-form" method="POST" action="/login">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" placeholder="Username" required autofocus />
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" placeholder="Password" required />
+      </div>
+      <button type="submit" class="btn-login">Sign In</button>
+    </form>
+  </div>
+  <script>
+    if (location.search.includes('error=1')) document.getElementById('error-msg').classList.remove('hidden');
+  </script>
+</body>
+</html>

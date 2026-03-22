@@ -1,0 +1,17 @@
+{
+  "name": "ssh-tunnel-manager",
+  "version": "1.0.0",
+  "description": "SSH Reverse Proxy Tunnel Manager",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "crypto": "^1.0.1",
+    "express": "^4.21.0",
+    "multer": "^2.1.1",
+    "ssh2": "^1.16.0",
+    "ws": "^8.18.0"
+  }
+}

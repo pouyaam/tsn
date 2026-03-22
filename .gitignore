@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.*
+
+# ─── Config / secrets (never push these) ─────────────
+app-settings.json
+xui-config.json
+local-accounts.json
+local-accounts.json.bak-*
+local-xray-settings.json
+xray-local-configs.json
+xray-local-configs.json.bak-*
+tunnels.json
+audit.json
+users.json
+profiles/
+ovpn-server-users.json
+ovpn-server-settings.json
+l2tp-users.json
+l2tp-settings.json
+vpn-install-result.json
+
+# ─── Temporary runtime state ──────────────────────────
+.local-xray-run.json
+.xray-local-run.json
+.xray-local-run-*.json
+.xray-test-*.json
+.xray-scan-*.json
+
+# ─── Logs ─────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# ─── OS / tooling ─────────────────────────────────────
+.DS_Store
+.claude/
+
+# ─── Archives ─────────────────────────────────────────
+*.zip
+
+# ─── Bundled binaries ─────────────────────────────────
+bin/

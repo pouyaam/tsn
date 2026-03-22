@@ -1,0 +1,23 @@
+[Unit]
+Description=VPN Tunnel Manager Panel
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/vpn-panel
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+
+# Run as root (needed for openconnect)
+User=root
+Group=root
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vpn-panel
+
+[Install]
+WantedBy=multi-user.target
