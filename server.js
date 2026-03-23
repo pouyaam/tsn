@@ -38,6 +38,9 @@ let appSettings = {
     servers: [],
     updateUrl: '',
   },
+  spoofDpi: {
+    port: 8080,
+  },
 };
 
 function loadAppSettings() {
@@ -54,6 +57,9 @@ function loadAppSettings() {
         servers: [],
         updateUrl: '',
       }, ...(appSettings.dnsConfig || {}) };
+      appSettings.spoofDpi = { ...{
+        port: 8080,
+      }, ...(appSettings.spoofDpi || {}) };
     }
   } catch {}
 }
@@ -61,6 +67,166 @@ function saveAppSettings() {
   fs.writeFileSync(APP_SETTINGS_FILE, JSON.stringify(appSettings, null, 2));
 }
 loadAppSettings();
+
+const SPOOFDPI_DEFAULTS = {
+  host: '127.0.0.1',
+  port: 8080,
+};
+
+let spoofDpiProcState = null;
+let spoofDpiLogs = [];
+
+function normalizeSpoofDpiPort(value, fallback = SPOOFDPI_DEFAULTS.port) {
+  const port = parseInt(value, 10);
+  if (port >= 1 && port <= 65535) return port;
+  return fallback;
+}
+
+function getConfiguredSpoofDpiPort() {
+  return normalizeSpoofDpiPort((appSettings.spoofDpi || {}).port, SPOOFDPI_DEFAULTS.port);
+}
+
+function getDefaultXrayRouteSocks() {
+  return {
+    host: SPOOFDPI_DEFAULTS.host,
+    port: getConfiguredSpoofDpiPort(),
+  };
+}
+
+function normalizeXrayRouteSocks(value, fallback = getDefaultXrayRouteSocks()) {
+  const base = fallback && typeof fallback === 'object' ? fallback : getDefaultXrayRouteSocks();
+  const next = value && typeof value === 'object' ? value : {};
+  const host = String(next.host || base.host || SPOOFDPI_DEFAULTS.host).trim() || SPOOFDPI_DEFAULTS.host;
+  return {
+    host,
+    port: normalizeSpoofDpiPort(next.port, base.port || SPOOFDPI_DEFAULTS.port),
+  };
+}
+
+function findSpoofDpiBinary() {
+  try {
+    return execSync('command -v spoofdpi 2>/dev/null', { encoding: 'utf8', timeout: 2000 }).trim();
+  } catch {}
+  return '';
+}
+
+function appendSpoofDpiLog(line) {
+  if (!line) return;
+  spoofDpiLogs.push({ t: Date.now(), m: line });
+  if (spoofDpiLogs.length > 400) spoofDpiLogs.shift();
+}
+
+function isSpoofDpiRunning() {
+  return !!(spoofDpiProcState && !spoofDpiProcState.stopping);
+}
+
+function getSpoofDpiStatusPayload() {
+  const port = spoofDpiProcState ? spoofDpiProcState.port : getConfiguredSpoofDpiPort();
+  const host = SPOOFDPI_DEFAULTS.host;
+  const binary = findSpoofDpiBinary();
+  return {
+    host,
+    port,
+    listenAddr: `${host}:${port}`,
+    command: `spoofdpi --listen-addr ${host}:${port}`,
+    binary,
+    commandAvailable: !!binary,
+    running: isSpoofDpiRunning(),
+    pid: spoofDpiProcState && spoofDpiProcState.proc ? spoofDpiProcState.proc.pid : null,
+    startedAt: spoofDpiProcState ? spoofDpiProcState.startedAt : null,
+    logs: spoofDpiLogs.slice(-80),
+  };
+}
+
+async function waitForSpoofDpiStop(timeoutMs = 3000) {
+  const startedAt = Date.now();
+  while (isSpoofDpiRunning() && (Date.now() - startedAt) < timeoutMs) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+}
+
+async function startSpoofDpiProcess(portOverride = null) {
+  if (isSpoofDpiRunning()) return spoofDpiProcState;
+
+  const binary = findSpoofDpiBinary();
+  if (!binary) throw new Error('spoofdpi binary not found in PATH');
+
+  const port = normalizeSpoofDpiPort(portOverride, getConfiguredSpoofDpiPort());
+  if (isTcpPortInUse(port)) {
+    throw new Error(`Port ${port} is already in use by another process.`);
+  }
+
+  const listenAddr = `${SPOOFDPI_DEFAULTS.host}:${port}`;
+  appendSpoofDpiLog(`[panel] starting ${binary} --listen-addr ${listenAddr}`);
+
+  let proc;
+  try {
+    proc = spawn(binary, ['--listen-addr', listenAddr], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (e) {
+    throw new Error(`Failed to spawn spoofdpi: ${e.message}`);
+  }
+
+  const state = {
+    proc,
+    port,
+    listenAddr,
+    startedAt: Date.now(),
+    stopping: false,
+    finalized: false,
+    recentStderr: '',
+  };
+  spoofDpiProcState = state;
+
+  const finalize = (line) => {
+    if (state.finalized) return;
+    state.finalized = true;
+    if (line) appendSpoofDpiLog(line);
+    if (spoofDpiProcState === state) spoofDpiProcState = null;
+  };
+
+  proc.stdout.on('data', data => {
+    const text = data.toString().trim();
+    if (!text) return;
+    text.split('\n').forEach(line => appendSpoofDpiLog(`[stdout] ${line}`));
+  });
+
+  proc.stderr.on('data', data => {
+    const text = data.toString().trim();
+    if (!text) return;
+    state.recentStderr += text + '\n';
+    state.recentStderr = state.recentStderr.slice(-4000);
+    text.split('\n').forEach(line => appendSpoofDpiLog(`[stderr] ${line}`));
+  });
+
+  proc.on('error', err => finalize(`[process error: ${err.message}]`));
+  proc.on('exit', code => finalize(`[process exited code=${code}]`));
+
+  await new Promise(resolve => setTimeout(resolve, 700));
+  if (proc.exitCode !== null) {
+    throw new Error(`SpoofDPI exited immediately: ${state.recentStderr.trim() || `exit code ${proc.exitCode}`}`);
+  }
+
+  return state;
+}
+
+function stopSpoofDpiProcess(reason = 'Stopped by user') {
+  const state = spoofDpiProcState;
+  if (!state || state.stopping) return false;
+  state.stopping = true;
+  appendSpoofDpiLog(`[panel] ${reason}`);
+  try { state.proc.kill('SIGTERM'); } catch {}
+  return true;
+}
+
+async function restartSpoofDpiProcess(reason = 'Restarted by panel') {
+  if (isSpoofDpiRunning()) {
+    stopSpoofDpiProcess(reason);
+    await waitForSpoofDpiStop();
+  }
+  return startSpoofDpiProcess();
+}
 
 const additiveJsonBackups = new Set();
 
@@ -2521,6 +2687,53 @@ app.post('/api/dns/update-ip', async (req, res) => {
   }
 });
 
+app.get('/api/spoofdpi/settings', (req, res) => {
+  res.json(getSpoofDpiStatusPayload());
+});
+
+app.post('/api/spoofdpi/settings', async (req, res) => {
+  try {
+    const previousPort = getConfiguredSpoofDpiPort();
+    const port = normalizeSpoofDpiPort(req.body && req.body.port, previousPort);
+    appSettings.spoofDpi = {
+      ...(appSettings.spoofDpi || {}),
+      port,
+    };
+    saveAppSettings();
+
+    let restarted = false;
+    if (isSpoofDpiRunning() && port !== previousPort) {
+      await restartSpoofDpiProcess('Port updated');
+      restarted = true;
+    }
+
+    res.json({ ok: true, restarted, ...getSpoofDpiStatusPayload() });
+  } catch (e) {
+    res.status(400).json({ error: e.message, ...getSpoofDpiStatusPayload() });
+  }
+});
+
+app.post('/api/spoofdpi/start', async (req, res) => {
+  try {
+    const port = normalizeSpoofDpiPort(req.body && req.body.port, getConfiguredSpoofDpiPort());
+    appSettings.spoofDpi = {
+      ...(appSettings.spoofDpi || {}),
+      port,
+    };
+    saveAppSettings();
+    await startSpoofDpiProcess(port);
+    res.json({ ok: true, ...getSpoofDpiStatusPayload() });
+  } catch (e) {
+    res.status(400).json({ error: e.message, ...getSpoofDpiStatusPayload() });
+  }
+});
+
+app.post('/api/spoofdpi/stop', async (req, res) => {
+  stopSpoofDpiProcess('Stopped by user');
+  await waitForSpoofDpiStop();
+  res.json({ ok: true, ...getSpoofDpiStatusPayload() });
+});
+
 app.get('/api/vpn/upstream-mode', (req, res) => {
   res.json(buildUpstreamRoutingState());
 });
@@ -4428,17 +4641,19 @@ app.post('/api/local-xray/start', async (req, res) => {
 
   proc.on('error', (err) => {
     pushLog(`[spawn error] ${err.message}`);
+    if (localXrayProc !== proc) return;
     stopTrafficPolling();
     stopXrayAccessLogWatcher();
-    if (localXrayProc === proc) localXrayProc = null;
+    localXrayProc = null;
     refreshVpnRoutes().catch(() => {});
   });
 
   proc.on('exit', (code) => {
     pushLog(`[process exited code=${code}]`);
+    if (localXrayProc !== proc) return;
     stopTrafficPolling();
     stopXrayAccessLogWatcher();
-    if (localXrayProc === proc) localXrayProc = null;
+    localXrayProc = null;
     refreshVpnRoutes().catch(() => {});
   });
 
@@ -4504,17 +4719,19 @@ app.post('/api/local-xray/restart', (req, res) => {
 
     proc.on('error', (err) => {
       pushLog(`[spawn error] ${err.message}`);
+      if (localXrayProc !== proc) return;
       stopTrafficPolling();
       stopXrayAccessLogWatcher();
-      if (localXrayProc === proc) localXrayProc = null;
+      localXrayProc = null;
       refreshVpnRoutes().catch(() => {});
     });
 
     proc.on('exit', (code) => {
       pushLog(`[process exited code=${code}]`);
+      if (localXrayProc !== proc) return;
       stopTrafficPolling();
       stopXrayAccessLogWatcher();
-      if (localXrayProc === proc) localXrayProc = null;
+      localXrayProc = null;
       refreshVpnRoutes().catch(() => {});
     });
 
@@ -4523,6 +4740,7 @@ app.post('/api/local-xray/restart', (req, res) => {
         const recentLogs = localXrayLogs.map(l => l.m).join('\n');
         res.status(500).json({ ok: false, error: 'Xray exited on restart', logs: recentLogs });
       } else {
+        startTrafficPolling();
         res.json({ ok: true, restarted: true, pid: proc.pid });
       }
     }, 800);
@@ -4815,18 +5033,21 @@ function restartLocalXray() {
     proc.stdout.on('data', d => d.toString().trim().split('\n').forEach(l => { if (l) pushLog(l); }));
     proc.on('error', (err) => {
       pushLog(`[spawn error] ${err.message}`);
+      if (localXrayProc !== proc) return;
       stopTrafficPolling();
       stopXrayAccessLogWatcher();
-      if (localXrayProc === proc) localXrayProc = null;
+      localXrayProc = null;
       refreshVpnRoutes().catch(() => {});
     });
     proc.on('exit', (code) => {
       pushLog(`[process exited code=${code}]`);
+      if (localXrayProc !== proc) return;
       stopTrafficPolling();
       stopXrayAccessLogWatcher();
-      if (localXrayProc === proc) localXrayProc = null;
+      localXrayProc = null;
       refreshVpnRoutes().catch(() => {});
     });
+    startTrafficPolling();
   }, 500);
 }
 
@@ -4946,6 +5167,7 @@ function loadXrayLocalConfigs() {
           ob.settings = { vnext: [{ address, port, users: [{ id, flow: flow || '', encryption: encryption || 'none' }] }] };
         }
         cfg.routeMode = normalizeXrayRouteMode(cfg.routeMode);
+        cfg.routeSocks = normalizeXrayRouteSocks(cfg.routeSocks);
       }
     }
   } catch {}
@@ -4969,6 +5191,7 @@ function getXraySessionPublicState(session) {
     httpPort: session.localBindings.httpPort,
     listenAddr: session.localBindings.listenAddr,
     routeMode: cfg ? normalizeXrayRouteMode(cfg.routeMode) : 'direct',
+    routeSocks: cfg ? normalizeXrayRouteSocks(cfg.routeSocks) : getDefaultXrayRouteSocks(),
     startedAt: session.startedAt || null,
   };
 }
@@ -5129,11 +5352,16 @@ function cloneJson(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
 
-const XRAY_ROUTE_MODES = new Set(['direct', 'openconnect', 'openvpn']);
+const XRAY_ROUTE_MODES = new Set(['direct', 'openconnect', 'openvpn', 'socks']);
 let xrayConfigRouteState = new Map();
 
 function normalizeXrayRouteMode(value) {
   return XRAY_ROUTE_MODES.has(value) ? value : 'direct';
+}
+
+function isLoopbackHost(host) {
+  const value = String(host || '').trim().toLowerCase();
+  return value === '127.0.0.1' || value === 'localhost' || value === '::1';
 }
 
 function getManagedTunnelDevices() {
@@ -5249,8 +5477,9 @@ async function syncXrayConfigRouteSelection(cfg, reason = 'Xray route sync') {
   if (!cfg || !cfg.id) return { mode: 'direct', pending: false, ips: [], device: null };
 
   const mode = normalizeXrayRouteMode(cfg.routeMode);
-  const device = getTunnelDeviceForXrayRouteMode(mode);
-  const resolvedIps = await resolveXrayConfigRouteIps(cfg);
+  const routeSocks = normalizeXrayRouteSocks(cfg.routeSocks);
+  const device = mode === 'socks' ? null : getTunnelDeviceForXrayRouteMode(mode);
+  const resolvedIps = mode === 'socks' ? [] : await resolveXrayConfigRouteIps(cfg);
   const previous = xrayConfigRouteState.get(cfg.id) || [];
   const previousByIp = new Map(previous.map(entry => [entry.ip, entry.device]));
   const allIps = new Set([...resolvedIps, ...previousByIp.keys()]);
@@ -5278,8 +5507,10 @@ async function syncXrayConfigRouteSelection(cfg, reason = 'Xray route sync') {
   return {
     mode,
     device,
+    viaLabel: mode === 'socks' ? `SOCKS ${routeSocks.host}:${routeSocks.port}` : null,
     ips: resolvedIps,
-    pending: mode !== 'direct' && !device,
+    socks: mode === 'socks' ? routeSocks : null,
+    pending: mode !== 'direct' && mode !== 'socks' && !device,
   };
 }
 
@@ -5311,16 +5542,36 @@ async function clearXrayConfigRouteSelection(configId, reason = 'Xray route clea
 }
 
 // --- Build standalone xray config for test/scanner (temporary processes) ---
-function buildStandaloneXrayConfig(outbound, socksPort, httpPort, listenAddr) {
+function buildStandaloneXrayConfig(outbound, socksPort, httpPort, listenAddr, options = {}) {
   const addr = listenAddr || '127.0.0.1';
+  const routeMode = normalizeXrayRouteMode(options.routeMode);
+  const routeSocks = normalizeXrayRouteSocks(options.routeSocks);
   const primaryOutbound = cloneJson(outbound) || { protocol: 'freedom', tag: 'proxy' };
   primaryOutbound.tag = primaryOutbound.tag || 'proxy';
+  if (routeMode === 'socks') {
+    primaryOutbound.proxySettings = {
+      ...(primaryOutbound.proxySettings && typeof primaryOutbound.proxySettings === 'object' ? primaryOutbound.proxySettings : {}),
+      tag: 'route-socks',
+    };
+  }
 
   const outbounds = [
     primaryOutbound,
     { protocol: 'freedom', tag: 'direct' },
     { protocol: 'blackhole', tag: 'block' },
   ];
+  if (routeMode === 'socks') {
+    outbounds.splice(1, 0, {
+      protocol: 'socks',
+      tag: 'route-socks',
+      settings: {
+        servers: [{
+          address: routeSocks.host,
+          port: routeSocks.port,
+        }],
+      },
+    });
+  }
 
   const config = {
     log: { loglevel: 'warning' },
@@ -5349,6 +5600,7 @@ function serializeXrayConfig(cfg) {
   return {
     ...cfg,
     routeMode: normalizeXrayRouteMode(cfg.routeMode),
+    routeSocks: normalizeXrayRouteSocks(cfg.routeSocks),
     localBindings: bindings,
     runState: {
       running,
@@ -5473,9 +5725,21 @@ async function startManagedXraySession(configId, overrideBindings = null) {
   if (routeState.pending) {
     throw new Error(`Selected tunnel ${routeState.mode} is not connected or does not expose a local TUN device yet.`);
   }
+  if (routeState.socks && isLoopbackHost(routeState.socks.host) && !isTcpPortInUse(routeState.socks.port)) {
+    throw new Error(`Selected SOCKS proxy ${routeState.socks.host}:${routeState.socks.port} is not listening.`);
+  }
 
   const runtimeFile = getXrayConfigRuntimePath(configId);
-  const runtimeConfig = buildStandaloneXrayConfig(cfg.outbound, bindings.socksPort, bindings.httpPort, bindings.listenAddr);
+  const runtimeConfig = buildStandaloneXrayConfig(
+    cfg.outbound,
+    bindings.socksPort,
+    bindings.httpPort,
+    bindings.listenAddr,
+    {
+      routeMode: cfg.routeMode,
+      routeSocks: cfg.routeSocks,
+    }
+  );
   fs.writeFileSync(runtimeFile, JSON.stringify(runtimeConfig, null, 2));
 
   let proc;
@@ -5499,7 +5763,10 @@ async function startManagedXraySession(configId, overrideBindings = null) {
   };
   xraySessions.set(configId, session);
 
-  appendXrayLog(configId, `[panel] Route mode: ${routeState.mode}${routeState.device ? ` via ${routeState.device}` : ''}${routeState.ips.length ? ` for ${routeState.ips.join(', ')}` : ''}`);
+  appendXrayLog(
+    configId,
+    `[panel] Route mode: ${routeState.mode}${routeState.viaLabel ? ` via ${routeState.viaLabel}` : routeState.device ? ` via ${routeState.device}` : ''}${routeState.ips.length ? ` for ${routeState.ips.join(', ')}` : ''}`
+  );
 
   const finalize = (line) => {
     if (session.finalized) return;
@@ -5570,6 +5837,7 @@ app.post('/api/xray-local/configs', (req, res) => {
       link,
       outbound: parsed.outbound,
       routeMode: 'direct',
+      routeSocks: getDefaultXrayRouteSocks(),
       localBindings: {
         listenAddr: XRAY_BINDINGS_DEFAULTS.listenAddr,
         socksPort: suggestedPorts.socksPort,
@@ -5609,22 +5877,49 @@ app.put('/api/xray-local/configs/:id/route-mode', async (req, res) => {
   const cfg = xrayLocalConfigs.find(c => c.id === req.params.id);
   if (!cfg) return res.status(404).json({ ok: false, error: 'Config not found' });
 
+  const previousMode = normalizeXrayRouteMode(cfg.routeMode);
   cfg.routeMode = normalizeXrayRouteMode(req.body.routeMode);
+  if (req.body && (req.body.routeSocks || req.body.socksHost !== undefined || req.body.socksPort !== undefined)) {
+    cfg.routeSocks = normalizeXrayRouteSocks(
+      req.body.routeSocks || {
+        host: req.body.socksHost,
+        port: req.body.socksPort,
+      },
+      cfg.routeSocks
+    );
+  } else {
+    cfg.routeSocks = normalizeXrayRouteSocks(cfg.routeSocks);
+  }
   saveXrayLocalConfigs();
 
   try {
     let state;
     if (isManagedXraySessionActive(xraySessions.get(cfg.id))) {
-      state = await syncXrayConfigRouteSelection(cfg, `Route mode changed (${cfg.remark || cfg.id})`);
+      if (previousMode === 'socks' || cfg.routeMode === 'socks') {
+        state = {
+          mode: cfg.routeMode,
+          device: null,
+          viaLabel: cfg.routeMode === 'socks' ? `SOCKS ${cfg.routeSocks.host}:${cfg.routeSocks.port}` : null,
+          socks: cfg.routeMode === 'socks' ? normalizeXrayRouteSocks(cfg.routeSocks) : null,
+          ips: [],
+          pending: false,
+          willApplyOnRun: true,
+        };
+      } else {
+        state = await syncXrayConfigRouteSelection(cfg, `Route mode changed (${cfg.remark || cfg.id})`);
+      }
     } else {
       await clearXrayConfigRouteSelection(cfg.id, `Route mode saved (${cfg.remark || cfg.id})`);
       const mode = normalizeXrayRouteMode(cfg.routeMode);
-      const device = getTunnelDeviceForXrayRouteMode(mode);
+      const socks = normalizeXrayRouteSocks(cfg.routeSocks);
+      const device = mode === 'socks' ? null : getTunnelDeviceForXrayRouteMode(mode);
       state = {
         mode,
         device,
-        ips: await resolveXrayConfigRouteIps(cfg),
-        pending: mode !== 'direct' && !device,
+        viaLabel: mode === 'socks' ? `SOCKS ${socks.host}:${socks.port}` : null,
+        socks: mode === 'socks' ? socks : null,
+        ips: mode === 'socks' ? [] : await resolveXrayConfigRouteIps(cfg),
+        pending: mode !== 'direct' && mode !== 'socks' && !device,
         willApplyOnRun: mode !== 'direct',
       };
     }
@@ -5779,7 +6074,10 @@ app.post('/api/xray-local/test', async (req, res) => {
   }
 
   const testPort = 30000 + Math.floor(Math.random() * 10000);
-  const testConfig = buildStandaloneXrayConfig(cfg.outbound, testPort, 0);
+  const testConfig = buildStandaloneXrayConfig(cfg.outbound, testPort, 0, '127.0.0.1', {
+    routeMode: cfg.routeMode,
+    routeSocks: cfg.routeSocks,
+  });
   // Set log level to info so we capture connection details
   testConfig.log = { loglevel: 'info' };
   const tmpPath = path.join(__dirname, `.xray-test-${testPort}.json`);
@@ -5879,7 +6177,10 @@ app.post('/api/xray-local/scan', async (req, res) => {
     replaceOutboundAddress(ob, ip);
 
     const scanPort = 20000 + Math.floor(Math.random() * 10000);
-    const scanConfig = buildStandaloneXrayConfig(ob, scanPort, 0);
+    const scanConfig = buildStandaloneXrayConfig(ob, scanPort, 0, '127.0.0.1', {
+      routeMode: cfg.routeMode,
+      routeSocks: cfg.routeSocks,
+    });
     const tmpPath = path.join(__dirname, `.xray-scan-${scanPort}.json`);
     fs.writeFileSync(tmpPath, JSON.stringify(scanConfig));
 
@@ -6061,6 +6362,7 @@ const DNS2SOCKS_PORT = 5353;
 const VPN_TCP_MSS = 1200;
 const OPENVPN_SUBNET = '10.8.0.0/24';
 const L2TP_SUBNET = '10.9.0.0/24';
+const VPN_REDSOCKS_TCP_CHAIN = 'VPN_REDSOCKS_TCP';
 
 let routingSocksPort = null; // user-overridden SOCKS port for redsocks
 
@@ -6080,6 +6382,70 @@ function getActiveSocksPort() {
   const runs = listXrayRuns();
   if (runs.length === 1) return runs[0].socksPort;
   return null;
+}
+
+function getRoutingSocksSources() {
+  const sources = [];
+  if (socksTunnelProc) sources.push({ label: `SSH SOCKS (${socksTunnelProc.tunnel.name})`, port: socksTunnelProc.tunnel.socksPort });
+  for (const run of listXrayRuns()) {
+    const cfg = getXrayConfigById(run.configId);
+    sources.push({
+      label: `Xray Client (${cfg ? cfg.remark : run.configId})`,
+      port: run.socksPort,
+    });
+  }
+  return sources;
+}
+
+function getTransparentProxyBypassCidrs() {
+  const cidrs = new Set([
+    '0.0.0.0/8',
+    '10.0.0.0/8',
+    '100.64.0.0/10',
+    '127.0.0.0/8',
+    '169.254.0.0/16',
+    '172.16.0.0/12',
+    '192.0.0.0/24',
+    '192.168.0.0/16',
+    '198.18.0.0/15',
+    '224.0.0.0/4',
+    '240.0.0.0/4',
+    OPENVPN_SUBNET,
+    L2TP_SUBNET,
+  ]);
+
+  const interfaces = os.networkInterfaces ? os.networkInterfaces() : {};
+  Object.values(interfaces || {}).forEach(addresses => {
+    (addresses || []).forEach(address => {
+      if (!address || address.family !== 'IPv4' || !address.address) return;
+      cidrs.add(`${address.address}/32`);
+    });
+  });
+
+  return [...cidrs];
+}
+
+function rebuildVpnTransparentProxyChain() {
+  const bypassCidrs = getTransparentProxyBypassCidrs();
+
+  try { runIptablesCommand(`iptables -t nat -N ${VPN_REDSOCKS_TCP_CHAIN}`); } catch {}
+  try { runIptablesCommand(`iptables -t nat -F ${VPN_REDSOCKS_TCP_CHAIN}`); } catch {}
+
+  for (const cidr of bypassCidrs) {
+    try {
+      runIptablesCommand(`iptables -t nat -A ${VPN_REDSOCKS_TCP_CHAIN} -d ${cidr} -j RETURN`);
+    } catch (e) {
+      console.error('[iptables] Failed to add transparent proxy bypass:', cidr, e.message);
+      addRoutingLog(`iptables bypass failed: ${cidr} (${e.message})`);
+    }
+  }
+
+  try {
+    runIptablesCommand(`iptables -t nat -A ${VPN_REDSOCKS_TCP_CHAIN} -p tcp -j REDIRECT --to-ports ${REDSOCKS_PORT}`);
+  } catch (e) {
+    console.error('[iptables] Failed to finalize transparent proxy chain:', e.message);
+    addRoutingLog(`iptables redirect chain failed: ${e.message}`);
+  }
 }
 
 function writeRedsocksConfig(socksPort) {
@@ -6113,6 +6479,13 @@ function startRedsocks(socksPort) {
   if (!socksPort) {
     console.error('[Redsocks] No SOCKS port provided');
     addRoutingLog('No SOCKS port was available for routing');
+    return false;
+  }
+  if (!isTcpPortInUse(socksPort)) {
+    console.error('[Redsocks] Selected upstream SOCKS port is not listening:', socksPort);
+    addRoutingLog(`SOCKS port ${socksPort} is not listening; routing not enabled`);
+    redsocksStatus = 'error';
+    broadcastVpnServerState();
     return false;
   }
 
@@ -6200,22 +6573,35 @@ function startRedsocks(socksPort) {
     });
   });
 
-  // Wait for redsocks to actually start listening before applying iptables
+  // Wait for the local TCP and DNS proxy listeners before applying iptables.
   let redsocksReady = false;
+  let dns2socksReady = false;
   for (let i = 0; i < 10; i++) {
     try { execSync('sleep 0.3', { stdio: 'ignore', timeout: 3000 }); } catch (e) {}
     try {
       execSync(`ss -tlnp | grep -q ':${REDSOCKS_PORT} '`, { stdio: 'pipe', timeout: 3000 });
       redsocksReady = true;
-      break;
     } catch (e) {}
+    try {
+      execSync(`ss -ulnp | grep -q ':${DNS2SOCKS_PORT} '`, { stdio: 'pipe', timeout: 3000 });
+      dns2socksReady = true;
+    } catch (e) {}
+    if (redsocksReady && dns2socksReady) break;
     // Check if process already exited
-    if (!redsocksProc || redsocksProc.exitCode !== null) break;
+    if ((!redsocksProc || redsocksProc.exitCode !== null) && (!dns2socksProc || dns2socksProc.exitCode !== null)) break;
   }
 
   if (!redsocksReady) {
     console.error('[Redsocks] Not listening on port ' + REDSOCKS_PORT + ' — NOT applying iptables (would black-hole traffic)');
     addRoutingLog(`redsocks never started listening on ${REDSOCKS_PORT}; routing not enabled`);
+    stopRedsocks();
+    redsocksStatus = 'error';
+    broadcastVpnServerState();
+    return false;
+  }
+  if (!dns2socksReady) {
+    console.error('[dns2socks] Not listening on UDP ' + DNS2SOCKS_PORT + ' — NOT applying iptables (DNS would black-hole)');
+    addRoutingLog(`dns2socks never started listening on ${DNS2SOCKS_PORT}; routing not enabled`);
     stopRedsocks();
     redsocksStatus = 'error';
     broadcastVpnServerState();
@@ -6263,9 +6649,9 @@ function applyVpnIptables() {
     { check: `iptables -t nat -C POSTROUTING -s ${L2TP_SUBNET} -j MASQUERADE`, add: `iptables -t nat -A POSTROUTING -s ${L2TP_SUBNET} -j MASQUERADE` },
     { check: `iptables -t mangle -C PREROUTING -s ${OPENVPN_SUBNET} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss ${VPN_TCP_MSS}`, add: `iptables -t mangle -A PREROUTING -s ${OPENVPN_SUBNET} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss ${VPN_TCP_MSS}` },
     { check: `iptables -t mangle -C PREROUTING -s ${L2TP_SUBNET} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss ${VPN_TCP_MSS}`, add: `iptables -t mangle -A PREROUTING -s ${L2TP_SUBNET} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss ${VPN_TCP_MSS}` },
-    // TCP → redsocks
-    { check: `iptables -t nat -C PREROUTING -s ${OPENVPN_SUBNET} -p tcp -j REDIRECT --to-ports ${REDSOCKS_PORT}`, add: `iptables -t nat -A PREROUTING -s ${OPENVPN_SUBNET} -p tcp -j REDIRECT --to-ports ${REDSOCKS_PORT}` },
-    { check: `iptables -t nat -C PREROUTING -s ${L2TP_SUBNET} -p tcp -j REDIRECT --to-ports ${REDSOCKS_PORT}`, add: `iptables -t nat -A PREROUTING -s ${L2TP_SUBNET} -p tcp -j REDIRECT --to-ports ${REDSOCKS_PORT}` },
+    // TCP → redsocks, but only after bypassing local/private/server destinations.
+    { check: `iptables -t nat -C PREROUTING -s ${OPENVPN_SUBNET} -p tcp -j ${VPN_REDSOCKS_TCP_CHAIN}`, add: `iptables -t nat -A PREROUTING -s ${OPENVPN_SUBNET} -p tcp -j ${VPN_REDSOCKS_TCP_CHAIN}` },
+    { check: `iptables -t nat -C PREROUTING -s ${L2TP_SUBNET} -p tcp -j ${VPN_REDSOCKS_TCP_CHAIN}`, add: `iptables -t nat -A PREROUTING -s ${L2TP_SUBNET} -p tcp -j ${VPN_REDSOCKS_TCP_CHAIN}` },
     // DNS → dns2socks
     { check: `iptables -t nat -C PREROUTING -s ${OPENVPN_SUBNET} -p udp --dport 53 -j DNAT --to-destination 127.0.0.1:${DNS2SOCKS_PORT}`, add: `iptables -t nat -A PREROUTING -s ${OPENVPN_SUBNET} -p udp --dport 53 -j DNAT --to-destination 127.0.0.1:${DNS2SOCKS_PORT}` },
     { check: `iptables -t nat -C PREROUTING -s ${L2TP_SUBNET} -p udp --dport 53 -j DNAT --to-destination 127.0.0.1:${DNS2SOCKS_PORT}`, add: `iptables -t nat -A PREROUTING -s ${L2TP_SUBNET} -p udp --dport 53 -j DNAT --to-destination 127.0.0.1:${DNS2SOCKS_PORT}` },
@@ -6286,6 +6672,7 @@ function applyVpnIptables() {
   // Sysctl settings first
   try { execSync('sysctl -w net.ipv4.ip_forward=1', { stdio: 'ignore' }); } catch (e) {}
   try { execSync('sysctl -w net.ipv4.conf.all.route_localnet=1', { stdio: 'ignore' }); } catch (e) {}
+  rebuildVpnTransparentProxyChain();
 
   // Apply rules only if they don't already exist (prevents duplicates)
   for (const rule of rules) {
@@ -6313,8 +6700,8 @@ function flushVpnIptables() {
     `iptables -t nat -D POSTROUTING -s ${L2TP_SUBNET} -j MASQUERADE`,
     `iptables -t mangle -D PREROUTING -s ${OPENVPN_SUBNET} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss ${VPN_TCP_MSS}`,
     `iptables -t mangle -D PREROUTING -s ${L2TP_SUBNET} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss ${VPN_TCP_MSS}`,
-    `iptables -t nat -D PREROUTING -s ${OPENVPN_SUBNET} -p tcp -j REDIRECT --to-ports ${REDSOCKS_PORT}`,
-    `iptables -t nat -D PREROUTING -s ${L2TP_SUBNET} -p tcp -j REDIRECT --to-ports ${REDSOCKS_PORT}`,
+    `iptables -t nat -D PREROUTING -s ${OPENVPN_SUBNET} -p tcp -j ${VPN_REDSOCKS_TCP_CHAIN}`,
+    `iptables -t nat -D PREROUTING -s ${L2TP_SUBNET} -p tcp -j ${VPN_REDSOCKS_TCP_CHAIN}`,
     `iptables -t nat -D PREROUTING -s ${OPENVPN_SUBNET} -p udp --dport 53 -j DNAT --to-destination 127.0.0.1:${DNS2SOCKS_PORT}`,
     `iptables -t nat -D PREROUTING -s ${L2TP_SUBNET} -p udp --dport 53 -j DNAT --to-destination 127.0.0.1:${DNS2SOCKS_PORT}`,
     `iptables -D INPUT -s ${OPENVPN_SUBNET} -p tcp --dport ${REDSOCKS_PORT} -j ACCEPT`,
@@ -6332,6 +6719,8 @@ function flushVpnIptables() {
       try { execSync(cmd, { stdio: 'ignore' }); } catch (e) { break; }
     }
   }
+  try { runIptablesCommand(`iptables -t nat -F ${VPN_REDSOCKS_TCP_CHAIN}`); } catch {}
+  try { runIptablesCommand(`iptables -t nat -X ${VPN_REDSOCKS_TCP_CHAIN}`); } catch {}
   vpnRoutingActive = false;
   addRoutingLog('iptables rules flushed');
   console.log('[iptables] VPN routing rules flushed (all duplicates removed)');
@@ -6743,15 +7132,6 @@ ${ta.trim()}
 // ─── OpenVPN Server API ─────────────────────────────────────────────
 
 app.get('/api/ovpn-server/status', (req, res) => {
-  const socksSources = [];
-  if (socksTunnelProc) socksSources.push({ label: `SSH SOCKS (${socksTunnelProc.tunnel.name})`, port: socksTunnelProc.tunnel.socksPort });
-  for (const run of listXrayRuns()) {
-    const cfg = getXrayConfigById(run.configId);
-    socksSources.push({
-      label: `Xray Client (${cfg ? cfg.remark : run.configId})`,
-      port: run.socksPort,
-    });
-  }
   res.json({
     status: ovpnServerStatus,
     connectedClients: parseOvpnStatusLog(),
@@ -6760,7 +7140,7 @@ app.get('/api/ovpn-server/status', (req, res) => {
     redsocks: redsocksStatus,
     vpnRouting: vpnRoutingActive,
     socksPort: getActiveSocksPort(),
-    socksSources,
+    socksSources: getRoutingSocksSources(),
   });
 });
 
@@ -6899,8 +7279,12 @@ app.get('/api/ovpn-server/users/:id/config', (req, res) => {
 
 const L2TP_USERS_FILE = path.join(__dirname, 'l2tp-users.json');
 const L2TP_SETTINGS_FILE = path.join(__dirname, 'l2tp-settings.json');
+const IPSEC_CONF_FILE = '/etc/ipsec.conf';
 const CHAP_SECRETS_FILE = '/etc/ppp/chap-secrets';
 const IPSEC_SECRETS_FILE = '/etc/ipsec.secrets';
+const XL2TPD_CONF_FILE = '/etc/xl2tpd/xl2tpd.conf';
+const PPP_OPTIONS_FILE = '/etc/ppp/options.xl2tpd';
+const L2TP_SERVER_NAME = 'l2tpd';
 
 let l2tpStatus = 'stopped';  // stopped | running | error
 let l2tpUsers = [];
@@ -6932,6 +7316,90 @@ function saveL2tpSettings() {
 loadL2tpUsers();
 loadL2tpSettings();
 
+function buildManagedIpsecConf() {
+  return `# Managed by VPN Panel - L2TP/IPsec
+config setup
+    charondebug="ike 1, knl 1, cfg 0"
+    uniqueids=no
+    sha2-truncbug=yes
+
+conn L2TP-PSK
+    keyexchange=ikev1
+    authby=secret
+    auto=add
+    keyingtries=3
+    rekey=no
+    ikelifetime=8h
+    keylife=1h
+    type=transport
+    fragmentation=yes
+    left=%defaultroute
+    leftprotoport=17/1701
+    right=%any
+    rightprotoport=17/%any
+    forceencaps=yes
+    dpddelay=30
+    dpdtimeout=120
+    dpdaction=clear
+    ike=aes256-sha1-modp1024,aes128-sha1-modp1024,aes256-sha256-modp2048,aes128-sha256-modp2048,3des-sha1-modp1024!
+    esp=aes256-sha1,aes128-sha1,aes256-sha256,3des-sha1!
+`;
+}
+
+function buildManagedXl2tpdConf() {
+  return `[global]
+port = 1701
+
+[lns default]
+ip range = 10.9.0.10-10.9.0.250
+local ip = 10.9.0.1
+require chap = yes
+refuse pap = yes
+require authentication = yes
+name = ${L2TP_SERVER_NAME}
+pppoptfile = ${PPP_OPTIONS_FILE}
+length bit = yes
+`;
+}
+
+function buildManagedPppOptions() {
+  return `# Managed by VPN Panel - L2TP PPP
+ipcp-accept-local
+ipcp-accept-remote
+require-mschap-v2
+refuse-eap
+refuse-pap
+refuse-chap
+refuse-mschap
+name ${L2TP_SERVER_NAME}
+ms-dns 1.1.1.1
+ms-dns 8.8.8.8
+noccp
+nodefaultroute
+auth
+mtu 1280
+mru 1280
+proxyarp
+asyncmap 0
+hide-password
+lock
+lcp-echo-failure 4
+lcp-echo-interval 30
+connect-delay 5000
+logfile /var/log/pppd.log
+`;
+}
+
+function writeManagedTextFile(filePath, content, mode = 0o644) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, content);
+  fs.chmodSync(filePath, mode);
+}
+
+function quoteChapField(value) {
+  return `"${String(value == null ? '' : value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
 function writeChapSecrets() {
   const lines = ['# Managed by VPN Panel - do not edit manually'];
   const now = Date.now();
@@ -6939,11 +7407,11 @@ function writeChapSecrets() {
     const expired = u.expiresAt && u.expiresAt < now;
     const overBw = u.bandwidthLimit && (u.usedTraffic || 0) >= u.bandwidthLimit;
     if (u.enabled && !expired && !overBw) {
-      lines.push(`${u.username}\tl2tpd\t${u.password}\t*`);
+      lines.push(`${quoteChapField(u.username)}\t*\t${quoteChapField(u.password)}\t*`);
     }
   }
   try {
-    fs.writeFileSync(CHAP_SECRETS_FILE, lines.join('\n') + '\n', { mode: 0o600 });
+    writeManagedTextFile(CHAP_SECRETS_FILE, lines.join('\n') + '\n', 0o600);
   } catch (e) {
     console.error('[L2TP] Failed to write chap-secrets:', e.message);
   }
@@ -6969,6 +7437,8 @@ function ensureL2tpFirewall() {
     'iptables -C INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -I INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT',
     // MASQUERADE for L2TP clients (so they have internet even without redsocks routing)
     'iptables -t nat -C POSTROUTING -s 10.9.0.0/24 -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s 10.9.0.0/24 -j MASQUERADE',
+    // Clamp MSS so client traffic survives L2TP/IPsec overhead reliably.
+    `iptables -t mangle -C FORWARD -s ${L2TP_SUBNET} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss ${VPN_TCP_MSS} 2>/dev/null || iptables -t mangle -A FORWARD -s ${L2TP_SUBNET} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss ${VPN_TCP_MSS}`,
     // FORWARD rules for L2TP traffic
     'iptables -C FORWARD -s 10.9.0.0/24 -j ACCEPT 2>/dev/null || iptables -A FORWARD -s 10.9.0.0/24 -j ACCEPT',
     'iptables -C FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT',
@@ -6983,37 +7453,21 @@ function ensureL2tpFirewall() {
 
 // Ensure /etc/ipsec.conf has the L2TP-PSK connection (writes it if missing)
 function ensureIpsecConf() {
-  const ipsecConf = `config setup
-    charondebug="ike 1, knl 1, cfg 0"
-    uniqueids=no
-
-conn L2TP-PSK
-    keyexchange=ikev1
-    authby=secret
-    auto=add
-    keyingtries=3
-    rekey=no
-    ikelifetime=8h
-    keylife=1h
-    type=transport
-    left=%defaultroute
-    leftprotoport=17/1701
-    right=%any
-    rightprotoport=17/%any
-    forceencaps=yes
-    dpddelay=30
-    dpdtimeout=120
-    dpdaction=clear
-    ike=aes256-sha256-modp2048,aes128-sha1-modp2048,3des-sha1-modp1024!
-    esp=aes256-sha256,aes128-sha1,3des-sha1!
-`;
+  const ipsecConf = buildManagedIpsecConf();
+  const requiredSnippets = [
+    'conn L2TP-PSK',
+    'keyexchange=ikev1',
+    'leftprotoport=17/1701',
+    'rightprotoport=17/%any',
+    'forceencaps=yes',
+    'sha2-truncbug=yes',
+  ];
   try {
-    // Check if the file has the L2TP-PSK connection
     let needsWrite = false;
-    if (fs.existsSync('/etc/ipsec.conf')) {
-      const current = fs.readFileSync('/etc/ipsec.conf', 'utf8');
-      if (!current.includes('conn L2TP-PSK')) {
-        console.log('[L2TP] /etc/ipsec.conf missing L2TP-PSK connection, rewriting');
+    if (fs.existsSync(IPSEC_CONF_FILE)) {
+      const current = fs.readFileSync(IPSEC_CONF_FILE, 'utf8');
+      if (!requiredSnippets.every(snippet => current.includes(snippet))) {
+        console.log('[L2TP] /etc/ipsec.conf is missing required L2TP settings, rewriting');
         needsWrite = true;
       }
     } else {
@@ -7021,11 +7475,55 @@ conn L2TP-PSK
       needsWrite = true;
     }
     if (needsWrite) {
-      fs.writeFileSync('/etc/ipsec.conf', ipsecConf);
+      writeManagedTextFile(IPSEC_CONF_FILE, ipsecConf);
     }
   } catch (e) {
     console.error('[L2TP] Failed to write ipsec.conf:', e.message);
   }
+}
+
+function ensureXl2tpdConf() {
+  try {
+    const desired = buildManagedXl2tpdConf();
+    const current = fs.existsSync(XL2TPD_CONF_FILE) ? fs.readFileSync(XL2TPD_CONF_FILE, 'utf8') : '';
+    if (current !== desired) {
+      writeManagedTextFile(XL2TPD_CONF_FILE, desired);
+    }
+  } catch (e) {
+    console.error('[L2TP] Failed to write xl2tpd.conf:', e.message);
+  }
+}
+
+function ensureL2tpPppOptions() {
+  try {
+    const desired = buildManagedPppOptions();
+    const current = fs.existsSync(PPP_OPTIONS_FILE) ? fs.readFileSync(PPP_OPTIONS_FILE, 'utf8') : '';
+    if (current !== desired) {
+      writeManagedTextFile(PPP_OPTIONS_FILE, desired);
+    }
+  } catch (e) {
+    console.error('[L2TP] Warning: could not write PPP options:', e.message);
+  }
+}
+
+function ensureL2tpPsk() {
+  let psk = getL2tpPsk();
+  try {
+    if (!psk) {
+      psk = crypto.randomBytes(16).toString('hex');
+      writeManagedTextFile(IPSEC_SECRETS_FILE, `: PSK "${psk}"\n`, 0o600);
+      console.log('[L2TP] Generated new IPsec PSK');
+    } else if (fs.existsSync(IPSEC_SECRETS_FILE)) {
+      fs.chmodSync(IPSEC_SECRETS_FILE, 0o600);
+    }
+  } catch (e) {
+    console.error('[L2TP] Warning: could not ensure ipsec.secrets:', e.message);
+  }
+  return psk;
+}
+
+function hasUnsafeChapField(value) {
+  return /[\r\n]/.test(String(value == null ? '' : value));
 }
 
 function startL2tp() {
@@ -7039,30 +7537,8 @@ function startL2tp() {
     try { execSync('modprobe l2tp_ppp', { stdio: 'pipe', timeout: 5000 }); } catch (e) {}
     try { execSync('modprobe pppol2tp', { stdio: 'pipe', timeout: 5000 }); } catch (e) {}
 
-    // Re-write PPP options to ensure refuse-eap is present (fixes Windows/iOS/macOS clients)
-    const pppOptions = `ipcp-accept-local
-ipcp-accept-remote
-require-mschap-v2
-refuse-eap
-refuse-pap
-refuse-chap
-refuse-mschap
-ms-dns 8.8.8.8
-ms-dns 8.8.4.4
-noccp
-nodefaultroute
-auth
-mtu 1280
-mru 1280
-proxyarp
-lcp-echo-failure 4
-lcp-echo-interval 30
-connect-delay 1000
-logfile /var/log/pppd.log
-`;
-    try { fs.writeFileSync('/etc/ppp/options.xl2tpd', pppOptions); } catch (e) {
-      console.error('[L2TP] Warning: could not write PPP options:', e.message);
-    }
+    ensureXl2tpdConf();
+    ensureL2tpPppOptions();
 
     // Write chap-secrets to ensure users are up to date
     writeChapSecrets();
@@ -7070,16 +7546,8 @@ logfile /var/log/pppd.log
     // Ensure ipsec.conf has L2TP-PSK connection (fixes missing connection issue)
     ensureIpsecConf();
 
-    // Ensure ipsec.secrets exists with PSK
-    try {
-      if (!fs.existsSync('/etc/ipsec.secrets')) {
-        const psk = require('crypto').randomBytes(16).toString('hex');
-        fs.writeFileSync('/etc/ipsec.secrets', `: PSK "${psk}"\n`, { mode: 0o600 });
-        console.log('[L2TP] Generated new IPsec PSK');
-      }
-    } catch (e) {
-      console.error('[L2TP] Warning: could not ensure ipsec.secrets:', e.message);
-    }
+    // Ensure ipsec.secrets exists with a valid PSK
+    ensureL2tpPsk();
 
     // Ensure firewall rules are in place
     ensureL2tpFirewall();
@@ -7250,8 +7718,13 @@ app.get('/api/l2tp/users', (req, res) => {
 });
 
 app.post('/api/l2tp/users', (req, res) => {
-  const { username, password, expiresAt, bandwidthLimit, speedLimit } = req.body;
+  const username = String(req.body.username || '').trim();
+  const password = String(req.body.password || '');
+  const { expiresAt, bandwidthLimit, speedLimit } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+  if (hasUnsafeChapField(username) || hasUnsafeChapField(password)) {
+    return res.status(400).json({ error: 'Username/password cannot contain new lines' });
+  }
 
   if (l2tpUsers.find(u => u.username === username)) {
     return res.status(400).json({ error: 'User already exists' });
@@ -7285,7 +7758,13 @@ app.put('/api/l2tp/users/:id', (req, res) => {
   const user = l2tpUsers.find(u => u.id === req.params.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
-  if (req.body.password) user.password = req.body.password;
+  if (req.body.password !== undefined) {
+    if (!req.body.password) return res.status(400).json({ error: 'Password cannot be empty' });
+    if (hasUnsafeChapField(req.body.password)) {
+      return res.status(400).json({ error: 'Password cannot contain new lines' });
+    }
+    user.password = String(req.body.password);
+  }
   if (req.body.enabled !== undefined) user.enabled = req.body.enabled;
   if (req.body.expiresAt !== undefined) user.expiresAt = req.body.expiresAt ? new Date(req.body.expiresAt).getTime() : null;
   if (req.body.bandwidthLimit !== undefined) user.bandwidthLimit = req.body.bandwidthLimit ? parseInt(req.body.bandwidthLimit) : null;
@@ -7330,21 +7809,11 @@ app.post('/api/l2tp/settings', (req, res) => {
 // ─── Redsocks/Routing API ───────────────────────────────────────────
 
 app.get('/api/routing/status', (req, res) => {
-  // List all available SOCKS sources so the UI can let the user pick
-  const sources = [];
-  if (socksTunnelProc) sources.push({ label: `SSH SOCKS (${socksTunnelProc.tunnel.name})`, port: socksTunnelProc.tunnel.socksPort });
-  for (const run of listXrayRuns()) {
-    const cfg = getXrayConfigById(run.configId);
-    sources.push({
-      label: `Xray Client (${cfg ? cfg.remark : run.configId})`,
-      port: run.socksPort,
-    });
-  }
   res.json({
     redsocks: redsocksStatus,
     vpnRouting: vpnRoutingActive,
     socksPort: getActiveSocksPort(),
-    socksSources: sources,
+    socksSources: getRoutingSocksSources(),
     redsocksPort: REDSOCKS_PORT,
     dns2socksPort: DNS2SOCKS_PORT,
   });
@@ -7446,6 +7915,7 @@ function broadcastVpnServerState() {
       redsocks: redsocksStatus,
       vpnRouting: vpnRoutingActive,
       socksPort: getActiveSocksPort(),
+      socksSources: getRoutingSocksSources(),
     },
   });
 }

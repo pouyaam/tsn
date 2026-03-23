@@ -7,7 +7,7 @@ Update contract:
 - Keep this file short and current. Replace stale status instead of appending long history.
 - At minimum, update: `Current Status`, `Completed`, `Next Steps`, `Risks`, and `Last Updated`.
 
-Last updated: 2026-03-21
+Last updated: 2026-03-22
 Project root: `/Users/pouya/Developer/Idea/vpn`
 
 ## Project Snapshot
@@ -28,6 +28,11 @@ The requested multi-run Xray model is now implemented:
 1. The Xray tab can run multiple saved configs concurrently, one process per config, each with its own persisted local bindings.
 2. The local V2Ray tab keeps one shared inbound runtime, but each local account can now be assigned to a saved Xray tunnel.
 3. Legacy local V2Ray accounts with no assignment keep their previous global outbound behavior.
+
+Local V2Ray traffic accounting now survives local Xray restarts:
+
+- The local Xray restart paths restart the traffic poller after a successful respawn.
+- Stale process `error` / `exit` handlers no longer tear down polling or the access-log watcher after a newer local Xray process has already taken over.
 
 Auth has been simplified back to a single-admin flow:
 
@@ -67,10 +72,15 @@ Auth has been simplified back to a single-admin flow:
   - persisted binding save action
 - Updated OpenVPN routing UI/backend so multiple Xray SOCKS sources are exposed explicitly instead of auto-picking one Xray run.
 - Tightened multi-run session consistency so stopping tunnels no longer serialize as running in config rows, and Xray-specific route pinning is cleared when a managed Xray process fails to start or exits unexpectedly.
+- Fixed local V2Ray traffic accounting after restart:
+  - `/api/local-xray/restart` now calls `startTrafficPolling()` after a successful restart
+  - `restartLocalXray()` now restarts the poller for automatic restarts
+  - local Xray process handlers now only stop polling/log watching when the exiting process is still the active one
 
 ## Not Done Yet
 
 - There is no dedicated manual smoke test or integration test coverage for the new multi-run Xray runtime.
+- The V2Ray traffic-accounting fix was syntax-checked, but not manually end-to-end exercised in this sandbox because local listening sockets are blocked here.
 - The routing diagnostics flow now supports explicit SOCKS selection via the OpenVPN status payload, but there is still no separate diagnostics-only picker/action in the UI.
 - Existing local-account table rows still show the condensed connection column; the expanded row contains the richer tunnel assignment state.
 
@@ -88,6 +98,7 @@ Auth has been simplified back to a single-admin flow:
    - additive JSON migration/backups
    - multi-run Xray status serialization
    - local V2Ray route rewriting for assigned accounts
+4. Manually verify that editing/restarting local Xray still increments `usedTraffic` in the V2Ray local tab after new traffic flows.
 
 ## Planned Behavior
 
@@ -107,6 +118,7 @@ Xray client behavior:
 
 - The project is not using a normal git worktree here, so reversions and cleanup are manual.
 - Multi-run Xray and per-account routing were syntax-checked, but not manually end-to-end tested in this session.
+- The local V2Ray traffic fix relies on restart timing assumptions still best confirmed with one manual smoke test on a real running panel.
 - Stopping a running Xray config is still asynchronous at the process level; the UI refreshes quickly, but the OS process may take a short moment to exit fully.
 - If auth-related work resumes later, check that it still uses `app-settings.json` instead of any alternate user store.
 

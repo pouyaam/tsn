@@ -364,9 +364,11 @@ EOF
 # ─── 6. Write StrongSwan config ─────────────────────────────────────
 log "Writing StrongSwan/IPsec config..."
 cat > /etc/ipsec.conf << 'EOF'
+# Managed by VPN Panel - L2TP/IPsec
 config setup
     charondebug="ike 1, knl 1, cfg 0"
     uniqueids=no
+    sha2-truncbug=yes
 
 conn L2TP-PSK
     keyexchange=ikev1
@@ -377,6 +379,7 @@ conn L2TP-PSK
     ikelifetime=8h
     keylife=1h
     type=transport
+    fragmentation=yes
     left=%defaultroute
     leftprotoport=17/1701
     right=%any
@@ -385,8 +388,8 @@ conn L2TP-PSK
     dpddelay=30
     dpdtimeout=120
     dpdaction=clear
-    ike=aes256-sha256-modp2048,aes128-sha1-modp2048,3des-sha1-modp1024!
-    esp=aes256-sha256,aes128-sha1,3des-sha1!
+    ike=aes256-sha1-modp1024,aes128-sha1-modp1024,aes256-sha256-modp2048,aes128-sha256-modp2048,3des-sha1-modp1024!
+    esp=aes256-sha1,aes128-sha1,aes256-sha256,3des-sha1!
 EOF
 
 # ─── 7. Determine L2TP Pre-Shared Key ───────────────────────────────
@@ -434,6 +437,7 @@ EOF
 log "Writing PPP options..."
 mkdir -p /etc/ppp
 cat > /etc/ppp/options.xl2tpd << 'EOF'
+# Managed by VPN Panel - L2TP PPP
 ipcp-accept-local
 ipcp-accept-remote
 require-mschap-v2
@@ -441,17 +445,21 @@ refuse-eap
 refuse-pap
 refuse-chap
 refuse-mschap
+name l2tpd
+ms-dns 1.1.1.1
 ms-dns 8.8.8.8
-ms-dns 8.8.4.4
 noccp
 nodefaultroute
 auth
 mtu 1280
 mru 1280
 proxyarp
+asyncmap 0
+hide-password
+lock
 lcp-echo-failure 4
 lcp-echo-interval 30
-connect-delay 1000
+connect-delay 5000
 logfile /var/log/pppd.log
 EOF
 
@@ -500,6 +508,8 @@ iptables -C INPUT -p esp -j ACCEPT 2>/dev/null || iptables -I INPUT -p esp -j AC
 # Also allow established/related for return traffic
 iptables -C INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \
   iptables -I INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+iptables -t mangle -C FORWARD -s 10.9.0.0/24 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1200 2>/dev/null || \
+  iptables -t mangle -A FORWARD -s 10.9.0.0/24 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1200
 
 # Save iptables rules so they survive reboot
 mkdir -p /etc/iptables

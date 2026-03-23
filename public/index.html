@@ -917,6 +917,25 @@
     </div>
 
     <div id="l2tp-main">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-row" style="align-items:center">
+          <div>
+            <div class="card-title">Traffic Routing</div>
+            <div class="card-meta" id="l2tp-routing-status-text">Redsocks: stopped | SOCKS: --</div>
+          </div>
+          <div class="field" style="margin-left:auto;min-width:220px">
+            <label>SOCKS Source</label>
+            <select id="l2tp-routing-socks-select" class="input">
+              <option value="">Auto-detect</option>
+            </select>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-green btn-touch" id="btn-l2tp-routing-start" onclick="startRouting()">Start Routing</button>
+            <button class="btn btn-red btn-touch hidden" id="btn-l2tp-routing-stop" onclick="stopRouting()">Stop Routing</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Server control -->
       <div class="card" style="margin-bottom:16px">
         <div class="card-row" style="align-items:center">
@@ -1073,6 +1092,7 @@
       <button class="settings-tab" data-stab="admin" onclick="switchSettingsTab('admin')">Admin</button>
       <button class="settings-tab" data-stab="vpn" onclick="switchSettingsTab('vpn')">VPN</button>
       <button class="settings-tab" data-stab="dns" onclick="switchSettingsTab('dns')">DNS</button>
+      <button class="settings-tab" data-stab="spoofdpi" onclick="switchSettingsTab('spoofdpi')">SpoofDPI</button>
       <button class="settings-tab" data-stab="routing" onclick="switchSettingsTab('routing')">Routing</button>
       <button class="settings-tab" data-stab="xray" onclick="switchSettingsTab('xray')">Xray</button>
       <button class="settings-tab" data-stab="deploy" onclick="switchSettingsTab('deploy')">Deploy</button>
@@ -1215,6 +1235,35 @@
           </div>
         </div>
         <div class="card-foot" id="dns-settings-status">Loading...</div>
+      </div>
+    </div>
+
+    <div class="settings-pane hidden" id="stab-spoofdpi">
+      <div class="card" id="settings-spoofdpi-card">
+        <div class="card-title">SpoofDPI</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+          <div class="field-row">
+            <div class="field">
+              <label>Listen Host</label>
+              <input type="text" id="spoofdpi-host" class="input" value="127.0.0.1" disabled />
+            </div>
+            <div class="field">
+              <label>Port</label>
+              <input type="number" id="spoofdpi-port" class="input" min="1" max="65535" value="8080" oninput="syncSpoofDpiCommandPreview()" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Command</label>
+            <input type="text" id="spoofdpi-command" class="input" value="spoofdpi --listen-addr 127.0.0.1:8080" readonly />
+            <span class="hint" style="font-size:10px;color:var(--t3)">The Xray config card SOCKS mode will use this port as its default local proxy target.</span>
+          </div>
+          <div class="card-btns">
+            <button class="btn btn-primary btn-touch" type="button" onclick="saveSpoofDpiSettings()">Save</button>
+            <button class="btn btn-ghost btn-touch" type="button" id="spoofdpi-start-btn" onclick="startSpoofDpi()">Start</button>
+            <button class="btn btn-ghost btn-touch" type="button" id="spoofdpi-stop-btn" onclick="stopSpoofDpi()">Stop</button>
+          </div>
+        </div>
+        <div class="card-foot" id="spoofdpi-status">Loading...</div>
       </div>
     </div>
 

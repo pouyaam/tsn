@@ -512,10 +512,15 @@ function connectWs() {
           connectedClients: data.openvpn.connectedClients,
           redsocks: data.routing.redsocks,
           socksPort: data.routing.socksPort,
+          socksSources: data.routing.socksSources,
         });
       }
       if (currentPage === 'l2tp') {
-        updateL2tpUI({ status: data.l2tp.status, connectedClients: data.l2tp.connectedClients });
+        updateL2tpUI(
+          { status: data.l2tp.status, connectedClients: data.l2tp.connectedClients },
+          null,
+          data.routing
+        );
       }
     } else if (data.type === 'vpn_install_log') {
       const logEl = $('vpn-install-log');
@@ -782,6 +787,104 @@ async function runDnsUpdateUrl() {
     setDnsSettingsStatus(output, 'green');
   } catch (e) {
     setDnsSettingsStatus('Curl failed: ' + e.message, 'red');
+  }
+}
+
+let spoofDpiState = {
+  host: '127.0.0.1',
+  port: 8080,
+  listenAddr: '127.0.0.1:8080',
+  command: 'spoofdpi --listen-addr 127.0.0.1:8080',
+  commandAvailable: false,
+  running: false,
+};
+
+function getSpoofDpiRouteDefaults() {
+  return {
+    host: String(spoofDpiState.host || '127.0.0.1').trim() || '127.0.0.1',
+    port: parseInt(spoofDpiState.port, 10) || 8080,
+  };
+}
+
+function setSpoofDpiStatus(message, tone = '') {
+  const el = $('spoofdpi-status');
+  if (!el) return;
+  el.textContent = message;
+  el.className = `card-foot${tone ? ' ' + tone : ''}`;
+}
+
+function syncSpoofDpiCommandPreview() {
+  const host = ($('spoofdpi-host')?.value || '127.0.0.1').trim() || '127.0.0.1';
+  const port = ($('spoofdpi-port')?.value || '8080').trim() || '8080';
+  if ($('spoofdpi-command')) $('spoofdpi-command').value = `spoofdpi --listen-addr ${host}:${port}`;
+}
+
+function applySpoofDpiState(data = {}) {
+  spoofDpiState = { ...spoofDpiState, ...data };
+  if ($('spoofdpi-host')) $('spoofdpi-host').value = spoofDpiState.host || '127.0.0.1';
+  if ($('spoofdpi-port')) $('spoofdpi-port').value = spoofDpiState.port || 8080;
+  syncSpoofDpiCommandPreview();
+
+  if ($('spoofdpi-start-btn')) $('spoofdpi-start-btn').disabled = !!spoofDpiState.running || !spoofDpiState.commandAvailable;
+  if ($('spoofdpi-stop-btn')) $('spoofdpi-stop-btn').disabled = !spoofDpiState.running;
+
+  const status = spoofDpiState.commandAvailable
+    ? spoofDpiState.running
+      ? `Running on ${spoofDpiState.listenAddr}${spoofDpiState.pid ? ` (PID ${spoofDpiState.pid})` : ''}`
+      : `Ready on ${spoofDpiState.listenAddr}`
+    : 'spoofdpi binary not found in PATH';
+  setSpoofDpiStatus(status, spoofDpiState.commandAvailable ? (spoofDpiState.running ? 'green' : '') : 'red');
+}
+
+async function loadSpoofDpiSettings() {
+  syncSpoofDpiCommandPreview();
+  try {
+    const data = await api('/spoofdpi/settings');
+    applySpoofDpiState(data || {});
+  } catch (e) {
+    setSpoofDpiStatus('Failed to load SpoofDPI settings', 'red');
+  }
+}
+
+async function saveSpoofDpiSettings() {
+  const port = parseInt(($('spoofdpi-port')?.value || '').trim(), 10);
+  if (!(port >= 1 && port <= 65535)) {
+    setSpoofDpiStatus('Port must be between 1 and 65535', 'red');
+    return;
+  }
+  try {
+    const data = await api('/spoofdpi/settings', { method: 'POST', body: { port } });
+    applySpoofDpiState(data || {});
+    setSpoofDpiStatus(
+      data.commandAvailable
+        ? (data.restarted ? 'SpoofDPI port saved and process restarted' : 'SpoofDPI port saved')
+        : 'Port saved, but spoofdpi binary is not available in PATH',
+      data.commandAvailable ? 'green' : 'red'
+    );
+    if (xrayLocalConfigs.length) renderXrayConfigs();
+  } catch (e) {
+    setSpoofDpiStatus('Failed to save SpoofDPI settings: ' + e.message, 'red');
+  }
+}
+
+async function startSpoofDpi() {
+  const port = parseInt(($('spoofdpi-port')?.value || '').trim(), 10);
+  try {
+    const data = await api('/spoofdpi/start', { method: 'POST', body: { port } });
+    applySpoofDpiState(data || {});
+    setSpoofDpiStatus(`SpoofDPI started on ${data.listenAddr}`, 'green');
+  } catch (e) {
+    setSpoofDpiStatus('Failed to start SpoofDPI: ' + e.message, 'red');
+  }
+}
+
+async function stopSpoofDpi() {
+  try {
+    const data = await api('/spoofdpi/stop', { method: 'POST' });
+    applySpoofDpiState(data || {});
+    setSpoofDpiStatus('SpoofDPI stopped');
+  } catch (e) {
+    setSpoofDpiStatus('Failed to stop SpoofDPI: ' + e.message, 'red');
   }
 }
 
@@ -3196,6 +3299,7 @@ function getXrayRouteModeLabel(mode) {
     direct: 'Direct',
     openconnect: 'OpenConnect',
     openvpn: 'OpenVPN',
+    socks: 'SOCKS',
   }[mode] || 'Direct';
 }
 
@@ -3218,6 +3322,23 @@ function renderXrayListenOptions(selectedValue) {
 
 function getXrayConfigById(id) {
   return xrayLocalConfigs.find(cfg => cfg.id === id) || null;
+}
+
+function getXrayConfigRouteSocks(cfg) {
+  const defaults = getSpoofDpiRouteDefaults();
+  const next = cfg && typeof cfg === 'object' ? cfg.routeSocks || {} : {};
+  return {
+    host: String(next.host || defaults.host).trim() || defaults.host,
+    port: parseInt(next.port, 10) || defaults.port,
+  };
+}
+
+function getXrayRouteSocksInputs(id) {
+  const defaults = getSpoofDpiRouteDefaults();
+  return {
+    host: ($(`xray-route-socks-host-${id}`)?.value || defaults.host).trim() || defaults.host,
+    port: parseInt($(`xray-route-socks-port-${id}`)?.value, 10) || defaults.port,
+  };
 }
 
 function populateAssignedXraySelect(selectedValue) {
@@ -3251,6 +3372,7 @@ function renderXrayConfigs() {
     const sec = cfg.outbound?.streamSettings?.security || '';
     const bindings = cfg.localBindings || {};
     const isActive = !!(cfg.runState && cfg.runState.running);
+    const routeSocks = getXrayConfigRouteSocks(cfg);
     const tags = [];
     tags.push(`<span class="ob-tag proto">${escapeHtml(proto)}</span>`);
     if (net) tags.push(`<span class="ob-tag net">${escapeHtml(net)}</span>`);
@@ -3285,11 +3407,16 @@ function renderXrayConfigs() {
             </div>
             <div class="card-meta" style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <span>Route via</span>
-              <select class="input" style="width:160px" onchange="updateXrayConfigRouteMode('${cfg.id}', this.value)">
+              <select class="input" style="width:160px" onchange="onXrayConfigRouteModeChange('${cfg.id}', this.value)">
                 <option value="direct"${(cfg.routeMode || 'direct') === 'direct' ? ' selected' : ''}>Direct</option>
                 <option value="openconnect"${cfg.routeMode === 'openconnect' ? ' selected' : ''}>OpenConnect</option>
                 <option value="openvpn"${cfg.routeMode === 'openvpn' ? ' selected' : ''}>OpenVPN</option>
+                <option value="socks"${cfg.routeMode === 'socks' ? ' selected' : ''}>SOCKS</option>
               </select>
+              <span id="xray-route-socks-wrap-${cfg.id}" style="display:${cfg.routeMode === 'socks' ? 'flex' : 'none'};gap:8px;align-items:flex-end;flex-wrap:wrap">
+                <input type="text" id="xray-route-socks-host-${cfg.id}" class="input" value="${escapeHtml(routeSocks.host)}" placeholder="127.0.0.1" style="width:130px" onchange="onXrayConfigRouteSocksChange('${cfg.id}')" />
+                <input type="number" id="xray-route-socks-port-${cfg.id}" class="input" value="${routeSocks.port}" min="1" max="65535" style="width:100px" onchange="onXrayConfigRouteSocksChange('${cfg.id}')" />
+              </span>
               <span>${isActive ? `Running on ${bindings.listenAddr}:${bindings.socksPort}${bindings.httpPort > 0 ? ` | HTTP ${bindings.httpPort}` : ' | HTTP off'}` : `Saved bindings: ${bindings.listenAddr}:${bindings.socksPort}${bindings.httpPort > 0 ? ` | HTTP ${bindings.httpPort}` : ' | HTTP off'}`}</span>
             </div>
           </div>
@@ -3309,6 +3436,25 @@ function renderXrayConfigs() {
       </div>`;
   }
   el.innerHTML = html;
+}
+
+async function onXrayConfigRouteModeChange(id, routeMode) {
+  const wrap = $(`xray-route-socks-wrap-${id}`);
+  if (wrap) wrap.style.display = routeMode === 'socks' ? 'flex' : 'none';
+
+  if (routeMode === 'socks') {
+    const defaults = getSpoofDpiRouteDefaults();
+    const hostInput = $(`xray-route-socks-host-${id}`);
+    const portInput = $(`xray-route-socks-port-${id}`);
+    if (hostInput && !hostInput.value.trim()) hostInput.value = defaults.host;
+    if (portInput && !portInput.value.trim()) portInput.value = String(defaults.port);
+  }
+
+  await updateXrayConfigRouteMode(id, routeMode);
+}
+
+async function onXrayConfigRouteSocksChange(id) {
+  await updateXrayConfigRouteMode(id, 'socks');
 }
 
 function getOutboundAddr(ob) {
@@ -3398,9 +3544,11 @@ function formatXrayEditJson() {
 
 async function updateXrayConfigRouteMode(id, routeMode) {
   try {
+    const body = { routeMode };
+    if (routeMode === 'socks') body.routeSocks = getXrayRouteSocksInputs(id);
     const res = await api(`/xray-local/configs/${id}/route-mode`, {
       method: 'PUT',
-      body: { routeMode },
+      body,
     });
     if (!res.ok) {
       showToast(res.error || 'Failed to update route mode', 'error');
@@ -3417,8 +3565,8 @@ async function updateXrayConfigRouteMode(id, routeMode) {
       showToast(`${getXrayRouteModeLabel(routeMode)} saved. It will apply when this tunnel runs.`, 'success');
     } else if (routeState.pending) {
       showToast(`${getXrayRouteModeLabel(routeMode)} saved. Route will apply when the tunnel connects.`, 'success');
-    } else if (routeState.device) {
-      showToast(`${getXrayRouteModeLabel(routeMode)} route applied via ${routeState.device}`, 'success');
+    } else if (routeState.viaLabel || routeState.device) {
+      showToast(`${getXrayRouteModeLabel(routeMode)} route applied via ${routeState.viaLabel || routeState.device}`, 'success');
     } else {
       showToast('Route mode set to Direct', 'success');
     }
@@ -3456,8 +3604,8 @@ async function startXrayWithConfig(configId) {
     const res = await api('/xray-local/start', { method: 'POST', body: { configId, ...bindings } });
     if (!res.ok) { alert('Failed: ' + (res.error || 'Unknown')); return; }
     const routeState = res.routeState || {};
-    const routeText = routeState.device
-      ? `${getXrayRouteModeLabel(routeState.mode)} via ${routeState.device}`
+    const routeText = (routeState.viaLabel || routeState.device)
+      ? `${getXrayRouteModeLabel(routeState.mode)} via ${routeState.viaLabel || routeState.device}`
       : getXrayRouteModeLabel(routeState.mode || 'direct');
     showToast(`Xray started: ${routeText}`, 'success');
     await refreshXrayStatus(true);
@@ -4050,6 +4198,7 @@ function initSettingsPage() {
     loadXrayBinaryInfo();
     loadOcSettings();
     loadDnsSettings();
+    loadSpoofDpiSettings();
     loadAdminInfo();
     settingsInitialized = true;
   }
@@ -4059,7 +4208,7 @@ function switchSettingsTab(tab) {
   document.querySelectorAll('.settings-tab[data-stab]').forEach(el => {
     el.classList.toggle('active', el.dataset.stab === tab);
   });
-  ['general', 'admin', 'vpn', 'dns', 'routing', 'xray', 'deploy'].forEach(t => {
+  ['general', 'admin', 'vpn', 'dns', 'spoofdpi', 'routing', 'xray', 'deploy'].forEach(t => {
     const pane = $('stab-' + t);
     if (pane) pane.classList.toggle('hidden', t !== tab);
   });
@@ -4277,6 +4426,32 @@ async function loadOvpnServerPage() {
   refreshOvpnServerLogs();
 }
 
+function updateVpnRoutingUI(status = {}, scope = 'ovpn') {
+  const isL2tp = scope === 'l2tp';
+  const routeText = $(isL2tp ? 'l2tp-routing-status-text' : 'routing-status-text');
+  const btnRouteStart = $(isL2tp ? 'btn-l2tp-routing-start' : 'btn-routing-start');
+  const btnRouteStop = $(isL2tp ? 'btn-l2tp-routing-stop' : 'btn-routing-stop');
+  const routeSelect = $(isL2tp ? 'l2tp-routing-socks-select' : 'routing-socks-select');
+
+  if (routeText) {
+    routeText.textContent = `Redsocks: ${status.redsocks || 'stopped'} | SOCKS port: ${status.socksPort || '--'}`;
+  }
+  if (btnRouteStart) btnRouteStart.classList.toggle('hidden', status.redsocks === 'running');
+  if (btnRouteStop) btnRouteStop.classList.toggle('hidden', status.redsocks !== 'running');
+  if (routeSelect) {
+    const current = routeSelect.value;
+    routeSelect.innerHTML = '<option value="">Auto-detect</option>';
+    for (const source of (status.socksSources || [])) {
+      routeSelect.insertAdjacentHTML('beforeend', `<option value="${source.port}">${escapeHtml(source.label)} :${source.port}</option>`);
+    }
+    if (current && [...routeSelect.options].some(opt => opt.value === current)) {
+      routeSelect.value = current;
+    } else if (status.socksPort && [...routeSelect.options].some(opt => opt.value === String(status.socksPort))) {
+      routeSelect.value = String(status.socksPort);
+    }
+  }
+}
+
 function updateOvpnServerUI(st, settings) {
   const pill = $('ovpn-server-pill');
   const pillText = $('ovpn-server-pill-text');
@@ -4295,22 +4470,7 @@ function updateOvpnServerUI(st, settings) {
   btnStart.classList.toggle('hidden', st.status === 'running');
   btnStop.classList.toggle('hidden', st.status !== 'running');
 
-  // Routing status
-  const routeText = $('routing-status-text');
-  const btnRouteStart = $('btn-routing-start');
-  const btnRouteStop = $('btn-routing-stop');
-  const routeSelect = $('routing-socks-select');
-  routeText.textContent = `Redsocks: ${st.redsocks || 'stopped'} | SOCKS port: ${st.socksPort || '--'}`;
-  btnRouteStart.classList.toggle('hidden', st.redsocks === 'running');
-  btnRouteStop.classList.toggle('hidden', st.redsocks !== 'running');
-  if (routeSelect) {
-    const current = routeSelect.value;
-    routeSelect.innerHTML = '<option value="">Auto-detect</option>';
-    for (const source of (st.socksSources || [])) {
-      routeSelect.insertAdjacentHTML('beforeend', `<option value="${source.port}">${escapeHtml(source.label)} :${source.port}</option>`);
-    }
-    if (current && [...routeSelect.options].some(opt => opt.value === current)) routeSelect.value = current;
-  }
+  updateVpnRoutingUI(st, 'ovpn');
 
   // Connected clients
   const clientsEl = $('ovpn-connected-clients');
@@ -4365,16 +4525,20 @@ async function stopOvpnServer() {
 }
 
 async function startRouting() {
-  const socksPort = $('routing-socks-select')?.value;
+  const socksPort = (currentPage === 'l2tp'
+    ? $('l2tp-routing-socks-select')
+    : $('routing-socks-select'))?.value;
   const body = socksPort ? { socksPort: parseInt(socksPort, 10) } : {};
   const res = await api('/routing/start', { method: 'POST', body });
   if (res.error) { showToast(res.error, 'error'); return; }
-  loadOvpnServerPage();
+  if (currentPage === 'l2tp') loadL2tpPage();
+  else loadOvpnServerPage();
 }
 
 async function stopRouting() {
   await api('/routing/stop', { method: 'POST' });
-  loadOvpnServerPage();
+  if (currentPage === 'l2tp') loadL2tpPage();
+  else loadOvpnServerPage();
 }
 
 async function saveOvpnMaxUsers() {
@@ -4544,16 +4708,17 @@ async function loadL2tpPage() {
   $('l2tp-not-installed').classList.add('hidden');
   $('l2tp-main').classList.remove('hidden');
 
-  const [st, users, settings] = await Promise.all([
+  const [st, users, settings, routing] = await Promise.all([
     api('/l2tp/status'),
     api('/l2tp/users'),
     api('/l2tp/settings'),
+    api('/routing/status'),
   ]);
-  updateL2tpUI(st, settings);
+  updateL2tpUI(st, settings, routing);
   renderL2tpUsers(users);
 }
 
-function updateL2tpUI(st, settings) {
+function updateL2tpUI(st, settings, routing = null) {
   const pill = $('l2tp-pill');
   const pillText = $('l2tp-pill-text');
   const statusText = $('l2tp-status-text');
@@ -4570,6 +4735,8 @@ function updateL2tpUI(st, settings) {
 
   btnStart.classList.toggle('hidden', st.status === 'running');
   btnStop.classList.toggle('hidden', st.status !== 'running');
+
+  if (routing) updateVpnRoutingUI(routing, 'l2tp');
 
   // PSK
   if (st.psk) $('l2tp-psk').textContent = st.psk;
